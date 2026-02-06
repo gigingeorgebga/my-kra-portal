@@ -5,7 +5,7 @@ import os
 
 # 1. Page Config & Logo
 st.set_page_config(page_title="Team KRA Portal", layout="wide")
-st.sidebar.image("logo.png", use_container_width=True) # Ensure your logo filename matches!
+st.sidebar.image("1 BGA Logo Colour.png", use_container_width=True) # Ensure your logo filename matches!
 st.sidebar.title("Navigation")
 
 # 2. THE BRAIN: Function to load and save data
