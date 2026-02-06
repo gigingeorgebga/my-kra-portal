@@ -9,7 +9,7 @@ st.set_page_config(page_title="Team KRA Portal", layout="wide")
 # --- 2. LOGO SECTION ---
 # This part tries to show the logo but won't crash if it's missing
 try:
-    st.sidebar.image("logo.png", use_container_width=True)
+    st.sidebar.image("1 BGA Logo Colour.png", use_container_width=True)
 except:
     st.sidebar.warning("⚠️ Logo file not found in GitHub")
 st.sidebar.divider()
