@@ -15,12 +15,15 @@ except:
     st.sidebar.warning("⚠️ Logo '1 BGA Logo Colour.png' not found in GitHub.")
 st.sidebar.divider()
 
-# --- 2. GMAIL SETTINGS (Configured with your key) ---
+# --- 2. GMAIL SETTINGS (Configured with your details) ---
 GMAIL_USER = "admin@thebga.io" 
 GMAIL_PASSWORD = "xtck srmm ncxx tmhr" 
 
 def send_invite_email(receiver_email, receiver_name):
-    msg = MIMEText(f"Hello {receiver_name},\n\nYou have been invited to the BGA KRA Portal.\n\nLogin Email: {receiver_email}\nTemporary Password: welcome123\n\nPlease log in here: https://share.streamlit.io/\n\nYou will be asked to set a private password upon your first login.")
+    # PLEASE UPDATE THE URL BELOW TO YOUR ACTUAL STREAMLIT APP LINK
+    app_url = "https://your-app-name.streamlit.app/" 
+    
+    msg = MIMEText(f"Hello {receiver_name},\n\nYou have been invited to the BGA KRA Portal.\n\nLogin Email: {receiver_email}\nTemporary Password: welcome123\n\nPlease log in here: {app_url}\n\nYou will be asked to set a private password upon your first login.")
     msg['Subject'] = 'Invite: BGA KRA Portal Access'
     msg['From'] = GMAIL_USER
     msg['To'] = receiver_email
@@ -49,7 +52,7 @@ def load_data(file, columns):
 def save_data(df, file):
     df.to_csv(file, index=False)
 
-# --- 4. SESSION STATE (The Memory) ---
+# --- 4. SESSION STATE (Memory) ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'user' not in st.session_state:
@@ -65,7 +68,11 @@ if not st.session_state['logged_in']:
     u_email = st.text_input("Email").strip().lower()
     u_pass = st.text_input("Password", type="password").strip()
     
-    if st.button("Login"):
+    col_l1, col_l2 = st.columns([1, 4])
+    with col_l1:
+        login_clicked = st.button("Login")
+
+    if login_clicked:
         # ADMIN HARDCODED LOGIN
         if u_email == "admin@bga.com" and u_pass == "admin123":
             st.session_state['logged_in'] = True
@@ -76,9 +83,8 @@ if not st.session_state['logged_in']:
         elif not user_df.empty:
             match = user_df[(user_df['Email'].str.lower() == u_email) & (user_df['Password'] == u_pass)]
             if not match.empty:
-                # Check if they are still using the temp password
                 if u_pass == "welcome123":
-                    st.warning("First time login detected! Please set your new password below.")
+                    st.warning("First-time login! Create your private password below.")
                     st.session_state['reset_email'] = u_email
                 else:
                     st.session_state['logged_in'] = True
@@ -88,28 +94,26 @@ if not st.session_state['logged_in']:
             else:
                 st.error("Invalid Credentials")
 
-    # Password Reset Section for first-time users
+    # Password Reset Section
     if 'reset_email' in st.session_state:
         st.divider()
         new_p = st.text_input("Create New Password", type="password")
-        if st.button("Save New Password"):
+        if st.button("Confirm New Password"):
             user_df.loc[user_df['Email'] == st.session_state['reset_email'], 'Password'] = new_p
             save_data(user_df, USER_DB)
-            st.success("Password Updated! Please login with your new password.")
+            st.success("Success! Now login with your new password.")
             del st.session_state['reset_email']
 
-# --- 6. THE MAIN PORTAL ---
+# --- 6. THE MAIN DASHBOARD ---
 else:
     task_df = load_data(TASK_DB, ["Date", "Owner", "Task", "Type", "Status", "QC_Comments"])
     
-    # Sidebar Navigation
     menu_options = ["📊 Dashboard"]
     if st.session_state['role'] == "Admin":
         menu_options.append("👥 Manage Team")
     
     choice = st.sidebar.radio("Navigation", menu_options)
 
-    # A. MANAGE TEAM PAGE
     if "Manage Team" in choice:
         st.header("👥 Team Management")
         with st.form("invite_user"):
@@ -123,22 +127,19 @@ else:
                 if send_invite_email(new_email, new_name):
                     st.success(f"Invite sent to {new_email}!")
                 else:
-                    st.warning("User saved, but email delivery failed. Verify Gmail App Password.")
+                    st.error("Email failed. Check your App URL in the code or Gmail settings.")
 
-    # B. DASHBOARD PAGE
     else:
         st.title(f"📊 {st.session_state['user']}'s Dashboard")
         
-        # Simple Stats
-        col1, col2 = st.columns(2)
-        col1.metric("Total Activities", len(task_df))
-        col2.metric("User Logged In", st.session_state['user'])
+        # Stats
+        c1, c2 = st.columns(2)
+        c1.metric("Tasks in Database", len(task_df))
+        c2.metric("Your Name", st.session_state['user'])
 
         st.divider()
 
-        # The Interactive Table
-        st.subheader("📝 Activity Tracker")
-        
+        # Task Table
         if st.session_state['role'] == "Admin":
             display_df = task_df
         else:
@@ -150,7 +151,6 @@ else:
                 "Status": st.column_config.SelectboxColumn(
                     "Status",
                     options=["🔴 Pending", "🟡 In Progress", "🟢 Completed", "🔍 QC Required", "✅ Approved"],
-                    required=True,
                 ),
                 "Date": st.column_config.TextColumn(disabled=True),
                 "Owner": st.column_config.TextColumn(disabled=True) if st.session_state['role'] != "Admin" else st.column_config.SelectboxColumn("Owner", options=["Admin", "Arathi", "Vineeth", "Muaad", "Mili", "Revathy"])
@@ -163,13 +163,11 @@ else:
             if st.session_state['role'] == "Admin":
                 save_data(updated_df, TASK_DB)
             else:
-                # Merge user changes back to the main file
                 task_df.update(updated_df)
                 save_data(task_df, TASK_DB)
-            st.success("Changes saved!")
+            st.success("Updated!")
             st.rerun()
 
-    # Logout
     if st.sidebar.button("🚪 Logout"):
         st.session_state['logged_in'] = False
         st.rerun()
