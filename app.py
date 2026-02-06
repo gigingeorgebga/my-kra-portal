@@ -3,44 +3,61 @@ import pandas as pd
 from datetime import datetime
 import os
 
-# 1. Page Config & Logo
+# --- 1. PAGE CONFIGURATION ---
 st.set_page_config(page_title="Team KRA Portal", layout="wide")
-st.sidebar.image("1 BGA Logo Colour.png", use_container_width=True) # Ensure your logo filename matches!
-st.sidebar.title("Navigation")
-st.write("Current Login Status:", st.session_state.get('logged_in'))
 
-# 2. THE BRAIN: Function to load and save data
+# --- 2. LOGO SECTION ---
+# This part tries to show the logo but won't crash if it's missing
+try:
+    st.sidebar.image("logo.png", use_container_width=True)
+except:
+    st.sidebar.warning("⚠️ Logo file not found in GitHub")
+st.sidebar.divider()
+
+# --- 3. THE DATABASE BRAIN ---
 DB_FILE = "database.csv"
 
 def load_data():
     if os.path.exists(DB_FILE):
         return pd.read_csv(DB_FILE)
+    # If file is missing, create a blank structure
     return pd.DataFrame(columns=["Date", "Owner", "Task", "Type", "Status", "QC_Comments"])
 
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
 
-# 3. Secure Login
+# --- 4. SESSION STATE (The Memory) ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
+# --- 5. LOGIN PAGE LOGIC ---
 if not st.session_state['logged_in']:
-    st.header("🔑 Team Access")
-    user = st.text_input("Username")
-    pw = st.text_input("Password", type="password")
-    if st.button("Login"):
-        if user == "admin" and pw == "team123":
+    st.header("🔑 Team Access Portal")
+    
+    with st.form("login_form"):
+        user_input = st.text_input("Username").lower().strip()
+        pass_input = st.text_input("Password", type="password").strip()
+        submit_button = st.form_submit_button("Login")
+
+    if submit_button:
+        if user_input == "admin" and pass_input == "team123":
             st.session_state['logged_in'] = True
+            st.success("Access Granted! Loading...")
             st.rerun()
+        else:
+            st.error("Invalid Username or Password. Please try again.")
+
+# --- 6. MAIN DASHBOARD (Only shows if logged in) ---
 else:
-    # --- LOGGED IN AREA ---
+    # Load the latest data from the CSV
     df = load_data()
     
     st.title("📊 Monthly Activity & KRA Planner")
+    st.info(f"Welcome back, {st.session_state.get('user', 'Admin')}!")
 
-    # Sidebar: Adding New Tasks
+    # SIDEBAR: ADDING NEW TASKS
     with st.sidebar:
-        st.subheader("➕ Assign New Task")
+        st.header("➕ Assign New Task")
         with st.form("task_form", clear_on_submit=True):
             new_task = st.text_input("Task Description")
             new_owner = st.selectbox("Assign To", ["Arathi", "Vineeth", "Muaad", "Mili", "Revathy"])
@@ -58,13 +75,13 @@ else:
                 }])
                 df = pd.concat([df, new_row], ignore_index=True)
                 save_data(df)
-                st.success("Added!")
+                st.success("Task Added to Database!")
                 st.rerun()
 
-    # Main Page: The Modern List View
-    st.subheader("📋 Team Work-Stream")
+    # MAIN AREA: THE MODERN LIST VIEW (Option B)
+    st.subheader("📋 Current Work Stream")
     
-    # This creates the "Interactive Table" where people can update status
+    # The Interactive Data Editor
     edited_df = st.data_editor(
         df, 
         column_config={
@@ -72,16 +89,25 @@ else:
                 "Status",
                 options=["🔴 Pending", "🟡 In Progress", "🟢 Completed", "QC Required"],
                 required=True,
-            )
+            ),
+            "Date": st.column_config.TextColumn(disabled=True), # Don't let users edit the date
         },
         use_container_width=True,
         num_rows="dynamic"
     )
 
-    if st.button("💾 Save All Changes"):
-        save_data(edited_df)
-        st.toast("Progress Saved Successfully!", icon="✅")
+    # SAVE BUTTON
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        if st.button("💾 Save All Changes"):
+            save_data(edited_df)
+            st.toast("Progress Saved Successfully!", icon="✅")
+    
+    with col2:
+        if st.button("🚪 Logout"):
+            st.session_state['logged_in'] = False
+            st.rerun()
 
-    if st.button("Logout"):
-        st.session_state['logged_in'] = False
-        st.rerun()
+    # FOOTER
+    st.divider()
+    st.caption("KRA Portal v1.0 | Built with Streamlit")
