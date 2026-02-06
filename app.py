@@ -5,7 +5,7 @@ from datetime import datetime
 # 1. Page Styling
 st.set_page_config(page_title="Team KRA Portal", layout="wide")
 # This part displays your logo in the sidebar
-st.sidebar.image("logo.png", use_container_width=True)
+st.sidebar.image("1 BGA Logo Colour.png", use_container_width=True)
 st.sidebar.divider()
 
 # 2. Simple Login (We will make this more advanced later)
