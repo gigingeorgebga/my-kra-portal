@@ -7,6 +7,7 @@ import os
 st.set_page_config(page_title="Team KRA Portal", layout="wide")
 st.sidebar.image("1 BGA Logo Colour.png", use_container_width=True) # Ensure your logo filename matches!
 st.sidebar.title("Navigation")
+st.write("Current Login Status:", st.session_state.get('logged_in'))
 
 # 2. THE BRAIN: Function to load and save data
 DB_FILE = "database.csv"
