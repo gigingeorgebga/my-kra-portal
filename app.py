@@ -20,8 +20,8 @@ GMAIL_USER = "admin@thebga.io"
 GMAIL_PASSWORD = "xtck srmm ncxx tmhr" 
 
 def send_invite_email(receiver_email, receiver_name):
-    # PLEASE UPDATE THE URL BELOW TO YOUR ACTUAL STREAMLIT APP LINK
-    app_url = "https://bga-kra-portal-xyz123.streamlit.app/" 
+    # I have updated this with your REAL URL:
+    app_url = "https://my-team-planner.streamlit.app/" 
     
     msg = MIMEText(f"Hello {receiver_name},\n\nYou have been invited to the BGA KRA Portal.\n\nLogin Email: {receiver_email}\nTemporary Password: welcome123\n\nPlease log in here: {app_url}\n\nYou will be asked to set a private password upon your first login.")
     msg['Subject'] = 'Invite: BGA KRA Portal Access'
@@ -68,11 +68,7 @@ if not st.session_state['logged_in']:
     u_email = st.text_input("Email").strip().lower()
     u_pass = st.text_input("Password", type="password").strip()
     
-    col_l1, col_l2 = st.columns([1, 4])
-    with col_l1:
-        login_clicked = st.button("Login")
-
-    if login_clicked:
+    if st.button("Login"):
         # ADMIN HARDCODED LOGIN
         if u_email == "admin@bga.com" and u_pass == "admin123":
             st.session_state['logged_in'] = True
@@ -99,8 +95,9 @@ if not st.session_state['logged_in']:
         st.divider()
         new_p = st.text_input("Create New Password", type="password")
         if st.button("Confirm New Password"):
-            user_df.loc[user_df['Email'] == st.session_state['reset_email'], 'Password'] = new_p
-            save_data(user_df, USER_DB)
+            current_users = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Status"])
+            current_users.loc[current_users['Email'] == st.session_state['reset_email'], 'Password'] = new_p
+            save_data(current_users, USER_DB)
             st.success("Success! Now login with your new password.")
             del st.session_state['reset_email']
 
@@ -127,18 +124,11 @@ else:
                 if send_invite_email(new_email, new_name):
                     st.success(f"Invite sent to {new_email}!")
                 else:
-                    st.error("Email failed. Check your App URL in the code or Gmail settings.")
+                    st.error("Email failed. Contact support.")
 
     else:
         st.title(f"📊 {st.session_state['user']}'s Dashboard")
         
-        # Stats
-        c1, c2 = st.columns(2)
-        c1.metric("Tasks in Database", len(task_df))
-        c2.metric("Your Name", st.session_state['user'])
-
-        st.divider()
-
         # Task Table
         if st.session_state['role'] == "Admin":
             display_df = task_df
@@ -168,6 +158,6 @@ else:
             st.success("Updated!")
             st.rerun()
 
-    if st.sidebar.button("🚪 Logout"):
+    if st.sidebar.button("Log Out"):
         st.session_state['logged_in'] = False
         st.rerun()
