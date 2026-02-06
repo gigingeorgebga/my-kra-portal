@@ -1,18 +1,20 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 import os
 import smtplib
 from email.mime.text import MIMEText
 
-# --- 1. CONFIG & LOGO ---
+# --- 1. CONFIG ---
 st.set_page_config(page_title="BGA KRA Portal", layout="wide")
 
-# Safety check for Logo
+# This block prevents the app from crashing even if the logo is missing
 try:
-    st.sidebar.image("1 BGA Logo Colour.png", use_container_width=True)
+    if os.path.exists("1 BGA Logo Colour.png"):
+        st.sidebar.image("1 BGA Logo Colour.png", use_container_width=True)
+    else:
+        st.sidebar.title("BGA Portal")
 except:
-    st.sidebar.info("Logo not found. Continuing...")
+    st.sidebar.title("BGA Portal")
 
 st.sidebar.divider()
 
@@ -34,7 +36,7 @@ def send_invite_email(receiver_email, receiver_name):
         return True
     except: return False
 
-# --- 3. DATABASE FUNCTIONS (With Auto-Create Safety) ---
+# --- 3. DATABASE FUNCTIONS (Auto-Creation) ---
 TASK_DB = "database.csv"
 USER_DB = "users.csv"
 
@@ -43,7 +45,10 @@ def load_data(file, columns):
         df = pd.DataFrame(columns=columns)
         df.to_csv(file, index=False)
         return df
-    return pd.read_csv(file)
+    try:
+        return pd.read_csv(file)
+    except:
+        return pd.DataFrame(columns=columns)
 
 def save_data(df, file):
     df.to_csv(file, index=False)
@@ -53,7 +58,7 @@ if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'user' not in st.session_state: st.session_state['user'] = ""
 if 'role' not in st.session_state: st.session_state['role'] = "User"
 
-# --- 5. LOGIN ---
+# --- 5. LOGIN PAGE ---
 if not st.session_state['logged_in']:
     st.header("🔑 BGA Team Login")
     user_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Status"])
@@ -96,14 +101,19 @@ else:
             n, e = st.text_input("Name"), st.text_input("Email").strip().lower()
             if st.form_submit_button("Invite"):
                 u_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Status"])
-                save_data(pd.concat([u_df, pd.DataFrame([{"Name":n,"Email":e,"Password":"welcome123","Role":"User","Status":"Active"}])]), USER_DB)
+                new_entry = pd.DataFrame([{"Name":n,"Email":e,"Password":"welcome123","Role":"User","Status":"Active"}])
+                save_data(pd.concat([u_df, new_entry], ignore_index=True), USER_DB)
                 st.success("Invite Sent!") if send_invite_email(e, n) else st.error("Mail Failed")
     else:
         st.title(f"📊 {st.session_state['user']}'s Portal")
         disp = task_df if st.session_state['role'] == "Admin" else task_df[task_df['Owner'] == st.session_state['user']]
         upd = st.data_editor(disp, use_container_width=True, num_rows="dynamic" if st.session_state['role'] == "Admin" else "fixed")
         if st.button("Save"):
-            save_data(upd if st.session_state['role'] == "Admin" else task_df.update(upd) or task_df, TASK_DB)
+            if st.session_state['role'] == "Admin":
+                save_data(upd, TASK_DB)
+            else:
+                task_df.update(upd)
+                save_data(task_df, TASK_DB)
             st.success("Done!")
 
     if st.sidebar.button("Logout"):
