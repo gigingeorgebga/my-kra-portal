@@ -21,7 +21,7 @@ GMAIL_PASSWORD = "xtck srmm ncxx tmhr"
 
 def send_invite_email(receiver_email, receiver_name):
     # PLEASE UPDATE THE URL BELOW TO YOUR ACTUAL STREAMLIT APP LINK
-    app_url = "https://your-app-name.streamlit.app/" 
+    app_url = "https://bga-kra-portal-xyz123.streamlit.app/" 
     
     msg = MIMEText(f"Hello {receiver_name},\n\nYou have been invited to the BGA KRA Portal.\n\nLogin Email: {receiver_email}\nTemporary Password: welcome123\n\nPlease log in here: {app_url}\n\nYou will be asked to set a private password upon your first login.")
     msg['Subject'] = 'Invite: BGA KRA Portal Access'
