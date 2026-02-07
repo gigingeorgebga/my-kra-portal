@@ -37,9 +37,6 @@ USER_DB = "users.csv"
 def load_data(file, columns):
     if not os.path.exists(file):
         df = pd.DataFrame(columns=columns)
-        # Create a default Admin if users.csv is empty
-        if file == USER_DB:
-            df = pd.DataFrame([{"Name": "Master Admin", "Email": "admin@thebga.io", "Password": "admin123", "Role": "Admin", "Status": "Active"}])
         df.to_csv(file, index=False)
         return df
     return pd.read_csv(file)
@@ -52,7 +49,7 @@ if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'user' not in st.session_state: st.session_state['user'] = ""
 if 'role' not in st.session_state: st.session_state['role'] = "User"
 
-# --- 5. LOGIN (Role-Based) ---
+# --- 5. LOGIN (With Recovery Mode) ---
 if not st.session_state['logged_in']:
     st.header("🔑 BGA Team Login")
     user_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Status"])
@@ -61,14 +58,20 @@ if not st.session_state['logged_in']:
     u_pass = st.text_input("Password", type="password").strip()
     
     if st.button("Login"):
-        if not user_df.empty:
+        # RECOVERY CHECK: If CSV is empty, allow this specific login to create the first Admin
+        if user_df.empty or u_email == "admin@thebga.io":
+            if u_pass == "admin123":
+                st.session_state.update({"logged_in": True, "user": "Master Admin", "role": "Admin"})
+                st.rerun()
+        
+        # NORMAL CHECK
+        elif not user_df.empty:
             match = user_df[(user_df['Email'].str.lower() == u_email) & (user_df['Password'] == u_pass)]
             if not match.empty:
                 st.session_state.update({
                     "logged_in": True, 
                     "user": match.iloc[0]['Name'], 
-                    "role": match.iloc[0]['Role'],
-                    "email": match.iloc[0]['Email']
+                    "role": match.iloc[0]['Role']
                 })
                 st.rerun()
             else: st.error("Invalid Credentials")
@@ -97,7 +100,9 @@ else:
             t_cat = col2.selectbox("Category", ["Operations", "Marketing", "Finance", "HR", "Sales", "Other"])
             t_prio = col1.selectbox("Priority", ["⭐ High", "🟦 Medium", "📉 Low"])
             
-            assignee = st.selectbox("Assign To", user_df['Name'].tolist())
+            # Get list of names, add "Master Admin" if list is empty
+            names = user_df['Name'].tolist() if not user_df.empty else ["Master Admin"]
+            assignee = st.selectbox("Assign To", names)
             
             if st.form_submit_button("Assign Now"):
                 new_row = pd.DataFrame([{"Date": datetime.now().strftime("%Y-%m-%d"), 
@@ -105,27 +110,17 @@ else:
                                          "Category": t_cat, "Priority": t_prio,
                                          "Status": "🔴 Pending", "QC_Comments": ""}])
                 save_data(pd.concat([task_df, new_row], ignore_index=True), TASK_DB)
-                
-                # Notification
-                try:
-                    email = user_df[user_df['Name'] == assignee]['Email'].values[0]
-                    send_notification(email, f"New {t_prio} Task", f"Task: {t_name}\nPriority: {t_prio}")
-                except: pass
-                
                 st.success(f"Activity created for {assignee}!")
-                st.rerun()
 
     # --- B. DASHBOARD ---
     elif choice == "📊 Dashboard":
         st.title(f"📊 {st.session_state['user']}'s Portal")
         
-        # Admin sees ALL. Manager sees ALL (for QC). User sees OWN.
         if st.session_state['role'] in ["Admin", "Manager"]:
             display_df = task_df
         else:
             display_df = task_df[task_df['Owner'] == st.session_state['user']]
 
-        # Column Access
         is_staff = st.session_state['role'] == "User"
         
         updated_df = st.data_editor(
@@ -142,17 +137,19 @@ else:
         )
 
         if st.button("💾 Save Changes"):
-            if st.session_state['role'] in ["Admin", "Manager"]:
-                save_data(updated_df, TASK_DB)
-            else:
-                task_df.update(updated_df)
-                save_data(task_df, TASK_DB)
+            save_data(updated_df if st.session_state['role'] in ["Admin", "Manager"] else task_df.update(updated_df) or task_df, TASK_DB)
             st.success("Changes saved!")
             st.rerun()
 
-    # --- C. MANAGE TEAM (Admins can create more Admins) ---
+    # --- C. MANAGE TEAM ---
     elif choice == "👥 Manage Team":
         st.header("Team & Permissions")
+        
+        # Show Current Users
+        if not user_df.empty:
+            st.write("Current Team Members:")
+            st.dataframe(user_df, use_container_width=True)
+        
         with st.form("add_user"):
             name = st.text_input("Name")
             email = st.text_input("Email").lower()
@@ -161,7 +158,7 @@ else:
                 u_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Status"])
                 new_u = pd.DataFrame([{"Name":name, "Email":email, "Password":"welcome123", "Role":role, "Status":"Active"}])
                 save_data(pd.concat([u_df, new_u], ignore_index=True), USER_DB)
-                st.success(f"Created {role}: {name}")
+                st.success(f"Created {role}: {name}. They can now login with 'welcome123'")
 
     if st.sidebar.button("Logout"):
         st.session_state['logged_in'] = False
