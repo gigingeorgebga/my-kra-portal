@@ -127,9 +127,13 @@ else:
     
     # ROLE BASED MENU
     if st.session_state['role'] in ["Admin", "Manager"]:
+        # --- ROLE BASED MENU ---
+    if st.session_state['role'] in ["Admin", "Manager"]:
         menu = ["📊 Dashboard", "➕ Assign Activity", "🏢 Clients", "👥 Manage Team", "📅 WD Calendar"]
     else:
         menu = ["📊 Dashboard"]
+    
+    choice = st.sidebar.radio("Navigation", menu)
     
     choice = st.sidebar.radio("Navigation", menu)
     
