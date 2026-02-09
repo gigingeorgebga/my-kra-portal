@@ -177,12 +177,16 @@ else:
         # --- PART 2: ACTIVE DIRECTORY & RESEND OPTION ---
         st.subheader("👥 Active Directory & Role Management")
         
+        # REFRESH DATA HERE:
+        user_df = load_db(USER_DB, ["Name", "Email", "Password", "Role", "Manager"])
+        
         # Display the list in an editable table
         edited_users = st.data_editor(
             user_df[["Name", "Email", "Role", "Manager"]], 
             use_container_width=True,
             column_config={
                 "Role": st.column_config.SelectboxColumn("Role", options=["User", "Manager", "Admin"], required=True),
+                # We also refresh the manager list here to include the new person
                 "Manager": st.column_config.SelectboxColumn("Manager", options=["None"] + user_df['Name'].tolist()),
                 "Email": st.column_config.TextColumn("Email", disabled=True) 
             },
