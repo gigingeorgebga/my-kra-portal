@@ -91,7 +91,13 @@ else:
     if os.path.exists(LOGO_FILE): st.sidebar.image(LOGO_FILE, use_container_width=True)
     st.sidebar.info(f"📅 **Current Context:** {get_current_wd()}")
     
-    menu = ["📊 Dashboard", "➕ Assign Activity", "🏢 Clients", "👥 Manage Team", "📅 WD Calendar"]
+    # --- ROLE BASED MENU ---
+    # Managers and Admins get full access, Users only get the Dashboard
+    if st.session_state['role'] in ["Admin", "Manager"]:
+        menu = ["📊 Dashboard", "➕ Assign Activity", "🏢 Clients", "👥 Manage Team", "📅 WD Calendar"]
+    else:
+        menu = ["📊 Dashboard"]
+    
     choice = st.sidebar.radio("Navigation", menu)
     
     if st.sidebar.button("Logout"):
