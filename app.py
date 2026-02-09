@@ -9,10 +9,9 @@ from datetime import datetime, date
 # --- 1. CONFIGURATION & EMAIL SETTINGS ---
 st.set_page_config(page_title="BGA F&A Workflow", layout="wide")
 
-# --- UPDATE THESE FOR EMAILS TO WORK ---
 SENDER_EMAIL = "admin@thebga.io"
 SENDER_PASSWORD = "vjec elpd kuvh frqp" 
-SMTP_SERVER = "smtp.gmail.com" # Change to smtp.office365.com if using Outlook
+SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
 USER_DB, TASK_DB, CLIENT_DB, CALENDAR_DB = "users.csv", "database.csv", "clients.csv", "calendar.csv"
@@ -49,7 +48,6 @@ def send_invite_email(recipient_email, recipient_name):
         msg['Subject'] = "BGA Portal Invitation"
         body = f"Hello {recipient_name},\n\nYou have been invited to the BGA F&A Workflow Portal.\n\n🔗 Login Here: https://my-team-planner.streamlit.app/\n\nUsername: {recipient_email}\nTemporary Password: welcome123\n\nPlease login and begin your tasks."
         msg.attach(MIMEText(body, 'plain'))
-        
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
         server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
@@ -73,23 +71,13 @@ if not st.session_state['logged_in']:
             p = st.text_input("Password", type="password")
             if st.form_submit_button("Sign In", use_container_width=True):
                 if u == "admin@thebga.io" and p == "admin123":
-                    st.session_state.update({
-                        "logged_in": True, 
-                        "user_name": "Admin", 
-                        "role": "Admin", 
-                        "email": u
-                    })
+                    st.session_state.update({"logged_in": True, "user_name": "Admin", "role": "Admin", "email": u})
                     st.rerun()
                 else:
                     udf = load_db(USER_DB, ["Name", "Email", "Password", "Role"])
                     match = udf[udf['Email'].str.lower() == u]
                     if not match.empty and str(match.iloc[0]['Password']) == p:
-                        st.session_state.update({
-                            "logged_in": True, 
-                            "user_name": match.iloc[0]['Name'], 
-                            "role": match.iloc[0]['Role'], 
-                            "email": u
-                        })
+                        st.session_state.update({"logged_in": True, "user_name": match.iloc[0]['Name'], "role": match.iloc[0]['Role'], "email": u})
                         st.rerun()
                     else:
                         st.error("Invalid Credentials")
@@ -99,35 +87,30 @@ else:
     user_df = load_db(USER_DB, ["Name", "Email", "Password", "Role", "Manager"])
     client_df = load_db(CLIENT_DB, ["Client_Name"])
 
-    # --- 5. PASSWORD RESET CHECK (The "Gate") ---
-    # We check if the logged-in user is still using the default password
+    # --- 5. PASSWORD RESET GATE ---
     current_user_email = st.session_state.get('email', '').lower()
     current_user_data = user_df[user_df['Email'].str.lower() == current_user_email]
     
     if st.session_state['user_name'] != "Admin" and not current_user_data.empty:
         if current_user_data.iloc[0]['Password'] == "welcome123":
-            st.warning("🔒 Security: You must change your temporary password to proceed.")
+            st.warning("🔒 Security: Please change your temporary password to proceed.")
             with st.form("pw_reset_form"):
-                new_pw = st.text_input("Create New Password", type="password")
+                new_pw = st.text_input("New Password", type="password")
                 conf_pw = st.text_input("Confirm New Password", type="password")
                 if st.form_submit_button("Update Password"):
                     if new_pw == conf_pw and len(new_pw) >= 6:
-                        # Update password in the dataframe and save to CSV
                         user_df.loc[user_df['Email'].str.lower() == current_user_email, 'Password'] = new_pw
                         user_df.to_csv(USER_DB, index=False)
-                        st.success("Password updated! Access granted.")
+                        st.success("Password updated!")
                         st.rerun()
                     else:
-                        st.error("Passwords must match and be at least 6 characters.")
-            st.stop() # This prevents the sidebar and dashboard from loading
+                        st.error("Passwords must match and be 6+ characters.")
+            st.stop()
 
     # --- 6. SIDEBAR & MENU ---
     if os.path.exists(LOGO_FILE): st.sidebar.image(LOGO_FILE, use_container_width=True)
-    st.sidebar.info(f"📅 **Current Context:** {get_current_wd()}")
+    st.sidebar.info(f"📅 **Context:** {get_current_wd()}")
     
-    # ROLE BASED MENU
-    if st.session_state['role'] in ["Admin", "Manager"]:
-        # --- ROLE BASED MENU ---
     if st.session_state['role'] in ["Admin", "Manager"]:
         menu = ["📊 Dashboard", "➕ Assign Activity", "🏢 Clients", "👥 Manage Team", "📅 WD Calendar"]
     else:
@@ -135,13 +118,11 @@ else:
     
     choice = st.sidebar.radio("Navigation", menu)
     
-    choice = st.sidebar.radio("Navigation", menu)
-    
     if st.sidebar.button("Logout"):
         st.session_state.clear()
         st.rerun()
 
-    # --- TAB: DASHBOARD (AUTO-SAVE) ---
+    # --- TAB: DASHBOARD ---
     if choice == "📊 Dashboard":
         st.header("Operations Dashboard")
         def auto_save():
@@ -151,7 +132,7 @@ else:
                     for key, value in changes.items():
                         task_df.at[int(index), key] = value
                 task_df.to_csv(TASK_DB, index=False)
-                st.toast("✅ Auto-saved changes!")
+                st.toast("✅ Auto-saved!")
 
         view_df = task_df if st.session_state['role'] == "Admin" else task_df[task_df['Owner'] == st.session_state['user_name']]
         st.data_editor(
@@ -163,21 +144,19 @@ else:
                 "End_Time": st.column_config.TimeColumn("End")
             }
         )
-        st.caption("💡 Changes are saved automatically as you edit.")
 
     # --- TAB: ASSIGN ACTIVITY ---
     elif choice == "➕ Assign Activity":
         st.header("Create New Assignment")
         with st.form("assign_form"):
-            col1, col2 = st.columns(2)
-            c = col1.selectbox("Client", client_df['Client_Name'].tolist() if not client_df.empty else ["No Clients"])
-            tow = col2.selectbox("Tower", ["O2C", "P2P", "R2R"])
+            c = st.selectbox("Client", client_df['Client_Name'].tolist() if not client_df.empty else ["No Clients"])
+            tow = st.selectbox("Tower", ["O2C", "P2P", "R2R"])
             act = st.text_input("Activity Description")
-            sop = st.text_input("SOP Link (URL)")
-            wdm = col1.text_input("WD Marker")
-            freq = col2.selectbox("Frequency", ["Daily", "Weekly", "Monthly", "Ad-hoc"])
-            own = col1.selectbox("Action Owner", user_df['Name'].tolist() if not user_df.empty else ["Admin"])
-            rev = col2.selectbox("Reviewer", user_df['Name'].tolist() if not user_df.empty else ["Admin"])
+            sop = st.text_input("SOP Link")
+            wdm = st.text_input("WD Marker")
+            freq = st.selectbox("Frequency", ["Daily", "Weekly", "Monthly", "Ad-hoc"])
+            own = st.selectbox("Action Owner", user_df['Name'].tolist())
+            rev = st.selectbox("Reviewer", user_df['Name'].tolist())
             
             if st.form_submit_button("Publish Task"):
                 new_t = pd.DataFrame([{
@@ -188,98 +167,46 @@ else:
                 pd.concat([task_df, new_t], ignore_index=True).to_csv(TASK_DB, index=False)
                 st.success("Task Published!")
 
-    # --- TAB: MANAGE TEAM (INVITE + ROLE EDITING) ---
-    elif choice == "👥 Manage Team" and st.session_state['role'] in ["Admin", "Manager"]:
+    # --- TAB: MANAGE TEAM ---
+    elif choice == "👥 Manage Team":
         st.header("Team Management")
-        
-        # --- PART 1: ADD / INVITE NEW MEMBER (WITH DUPLICATE CHECK) ---
         with st.form("invite_form", clear_on_submit=True):
             st.subheader("➕ Invite New Member")
-            c1, c2 = st.columns(2)
-            n = c1.text_input("Full Name")
-            e = c2.text_input("Email").strip().lower()
-            r = c1.selectbox("Role", ["User", "Manager", "Admin"])
-            m = c2.selectbox("Reporting Manager", ["None"] + user_df['Name'].tolist())
-            
-            if st.form_submit_button("Add Member & Send Invite"):
+            n = st.text_input("Full Name")
+            e = st.text_input("Email").strip().lower()
+            r = st.selectbox("Role", ["User", "Manager", "Admin"])
+            m = st.selectbox("Reporting Manager", ["None"] + user_df['Name'].tolist())
+            if st.form_submit_button("Invite"):
                 if n and e:
-                    # CHECK IF USER ALREADY EXISTS
                     if e in user_df['Email'].str.lower().values:
-                        st.error(f"❌ Error: A user with the email '{e}' already exists!")
+                        st.error("User already exists!")
                     else:
                         new_u = pd.DataFrame([{"Name": n, "Email": e, "Role": r, "Manager": m, "Password": "welcome123"}])
-                        user_df = pd.concat([user_df, new_u], ignore_index=True)
-                        user_df.to_csv(USER_DB, index=False)
-                        
-                        email_success = send_invite_email(e, n)
-                        if email_success:
-                            st.success(f"✅ Invite sent to {e}!")
-                            st.rerun()
-                        else:
-                            st.warning("⚠️ User added, but email failed. Check settings.")
-                else:
-                    st.error("Name and Email are mandatory.")
+                        pd.concat([user_df, new_u], ignore_index=True).to_csv(USER_DB, index=False)
+                        if send_invite_email(e, n): st.success(f"Invite sent to {e}!")
+                        st.rerun()
 
         st.divider()
-        
-        # --- PART 2: ACTIVE DIRECTORY & STATUS TRACKER ---
-        st.subheader("👥 Active Directory & Status")
-        
-        # Refresh data to show current state
-        user_df = load_db(USER_DB, ["Name", "Email", "Password", "Role", "Manager"])
-        
-        # ADD STATUS COLUMN: If password is 'welcome123' -> Pending, otherwise -> Active
-        user_df['Status'] = user_df['Password'].apply(
-            lambda x: "🟡 Pending" if x == "welcome123" else "🟢 Active"
-        )
-        
-        # Display editable table (Email is locked, but Role/Manager/Status are visible)
+        st.subheader("👥 Active Directory")
+        user_df['Status'] = user_df['Password'].apply(lambda x: "🟡 Pending" if x == "welcome123" else "🟢 Active")
         edited_users = st.data_editor(
             user_df[["Name", "Email", "Role", "Manager", "Status"]], 
-            use_container_width=True,
-            column_config={
-                "Role": st.column_config.SelectboxColumn("Role", options=["User", "Manager", "Admin"], required=True),
-                "Manager": st.column_config.SelectboxColumn("Manager", options=["None"] + user_df['Name'].tolist()),
-                "Email": st.column_config.TextColumn("Email", disabled=True),
-                "Status": st.column_config.TextColumn("Status", disabled=True) 
-            },
-            key="user_role_editor",
-            hide_index=True
+            use_container_width=True, hide_index=True,
+            column_config={"Email": st.column_config.TextColumn("Email", disabled=True), "Status": st.column_config.TextColumn("Status", disabled=True)}
         )
-        
-        col_s1, col_s2 = st.columns([1, 1])
-        if col_s1.button("💾 Save User Role Updates", type="primary", use_container_width=True):
+        if st.button("💾 Save Updates"):
             for i, row in edited_users.iterrows():
-                # Update the main user_df with the changes from the table
                 idx = user_df.index[user_df['Email'] == row['Email']]
-                user_df.loc[idx, "Role"] = row["Role"]
-                user_df.loc[idx, "Manager"] = row["Manager"]
-            
-            # Save back to CSV (preserving the passwords)
+                user_df.loc[idx, "Role"], user_df.loc[idx, "Manager"] = row["Role"], row["Manager"]
             user_df[["Name", "Email", "Password", "Role", "Manager"]].to_csv(USER_DB, index=False)
-            st.success("User roles and managers updated!")
+            st.success("Updated!")
             st.rerun()
-        # NEW: RESEND INVITE BUTTON
-        with st.expander("✉️ Resend Invite to Existing Member"):
-            resend_name = st.selectbox("Select user to resend email", user_df['Name'].tolist())
-            if st.button("Resend Invitation Email"):
-                user_row = user_df[user_df['Name'] == resend_name].iloc[0]
-                if send_invite_email(user_row['Email'], user_row['Name']):
-                    st.success(f"Invite resent to {user_row['Email']}!")
-                else:
-                    st.error("Failed to resend. Check SMTP settings.")
 
-        # --- PART 3: DELETE MEMBER (ADMIN ONLY) ---
-        st.divider()
-        st.subheader("🗑️ Danger Zone")
-        with st.expander("Delete User Account"):
-            user_to_delete = st.selectbox("Select user to remove permanently", user_df['Name'].tolist(), key="del_select")
-            if st.button("Permanently Delete User", type="secondary"):
-                if user_to_delete:
-                    user_df = user_df[user_df['Name'] != user_to_delete]
-                    user_df.to_csv(USER_DB, index=False)
-                    st.success(f"Removed {user_to_delete} from the portal.")
-                    st.rerun()
+        with st.expander("🗑️ Danger Zone"):
+            user_to_del = st.selectbox("Remove User", user_df['Name'].tolist())
+            if st.button("Delete Permanently"):
+                user_df[user_df['Name'] != user_to_del].to_csv(USER_DB, index=False)
+                st.rerun()
 
     # --- TAB: WD CALENDAR ---
     elif choice == "📅 WD Calendar":
@@ -293,7 +220,7 @@ else:
         cal_e = st.data_editor(load_db(CALENDAR_DB, ["Date", "Is_Holiday"]), use_container_width=True)
         if st.button("Save Calendar"):
             cal_e.to_csv(CALENDAR_DB, index=False)
-            st.success("Calendar Updated!")
+            st.success("Saved!")
 
     # --- TAB: CLIENTS ---
     elif choice == "🏢 Clients":
@@ -304,4 +231,4 @@ else:
                 if new_c:
                     pd.concat([client_df, pd.DataFrame([{"Client_Name": new_c}])], ignore_index=True).to_csv(CLIENT_DB, index=False)
                     st.rerun()
-        st.table(client_df)
+        st.table(load_db(CLIENT_DB, ["Client_Name"]))
