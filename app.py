@@ -148,6 +148,8 @@ else:
     # --- TAB: MANAGE TEAM (INVITE + ROLE EDITING) ---
     elif choice == "👥 Manage Team":
         st.header("Team Management")
+        
+        # --- PART 1: ADD / INVITE NEW MEMBER ---
         with st.form("invite_form", clear_on_submit=True):
             st.subheader("➕ Invite New Member")
             c1, c2 = st.columns(2)
@@ -171,7 +173,11 @@ else:
                     st.error("Name and Email are mandatory.")
 
         st.divider()
+        
+        # --- PART 2: ACTIVE DIRECTORY & RESEND OPTION ---
         st.subheader("👥 Active Directory & Role Management")
+        
+        # Display the list in an editable table
         edited_users = st.data_editor(
             user_df[["Name", "Email", "Role", "Manager"]], 
             use_container_width=True,
@@ -182,13 +188,37 @@ else:
             },
             key="user_role_editor"
         )
-        if st.button("💾 Save User Role Updates", type="primary"):
+        
+        col_s1, col_s2 = st.columns([1, 1])
+        if col_s1.button("💾 Save User Role Updates", type="primary", use_container_width=True):
             for i, row in edited_users.iterrows():
                 user_df.at[i, "Role"] = row["Role"]
                 user_df.at[i, "Manager"] = row["Manager"]
             user_df.to_csv(USER_DB, index=False)
             st.success("User roles and managers updated!")
             st.rerun()
+
+        # NEW: RESEND INVITE BUTTON
+        with st.expander("✉️ Resend Invite to Existing Member"):
+            resend_name = st.selectbox("Select user to resend email", user_df['Name'].tolist())
+            if st.button("Resend Invitation Email"):
+                user_row = user_df[user_df['Name'] == resend_name].iloc[0]
+                if send_invite_email(user_row['Email'], user_row['Name']):
+                    st.success(f"Invite resent to {user_row['Email']}!")
+                else:
+                    st.error("Failed to resend. Check SMTP settings.")
+
+        # --- PART 3: DELETE MEMBER (ADMIN ONLY) ---
+        st.divider()
+        st.subheader("🗑️ Danger Zone")
+        with st.expander("Delete User Account"):
+            user_to_delete = st.selectbox("Select user to remove permanently", user_df['Name'].tolist(), key="del_select")
+            if st.button("Permanently Delete User", type="secondary"):
+                if user_to_delete:
+                    user_df = user_df[user_df['Name'] != user_to_delete]
+                    user_df.to_csv(USER_DB, index=False)
+                    st.success(f"Removed {user_to_delete} from the portal.")
+                    st.rerun()
 
     # --- TAB: WD CALENDAR ---
     elif choice == "📅 WD Calendar":
