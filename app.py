@@ -156,28 +156,61 @@ else:
     # --- TAB: MANAGE TEAM (WITH EMAIL TRIGGER) ---
     elif choice == "👥 Manage Team":
         st.header("Team Management")
-        with st.form("team_form"):
-            col1, col2 = st.columns(2)
-            n = col1.text_input("Full Name")
-            e = col2.text_input("Email Address")
-            r = col1.selectbox("Role", ["User", "Manager", "Admin"])
-            m = col2.selectbox("Reporting Manager", ["None"] + user_df['Name'].tolist())
-            p = st.text_input("Initial Password", value="welcome123")
+        
+        # --- PART 1: ADD / INVITE NEW MEMBER ---
+        with st.form("invite_form", clear_on_submit=True):
+            st.subheader("➕ Invite New Member")
+            c1, c2 = st.columns(2)
+            n = c1.text_input("Full Name")
+            e = c2.text_input("Email")
+            r = c1.selectbox("Role", ["User", "Manager", "Admin"])
+            m = c2.selectbox("Reporting Manager", ["None"] + user_df['Name'].tolist())
             
             if st.form_submit_button("Add Member & Send Invite"):
                 if n and e:
-                    new_u = pd.DataFrame([{"Name": n, "Email": e, "Role": r, "Manager": m, "Password": p}])
-                    pd.concat([user_df, new_u], ignore_index=True).to_csv(USER_DB, index=False)
+                    # 1. Create new user data
+                    new_u = pd.DataFrame([{"Name": n, "Email": e, "Role": r, "Manager": m, "Password": "welcome123"}])
                     
-                    # TRIGGER EMAIL
-                    with st.spinner("Sending Invite Email..."):
-                        if send_invite_email(e, n):
-                            st.success(f"Added {n} and Invite Sent!")
-                        else:
-                            st.warning(f"Added {n}, but email failed. Check SMTP settings.")
+                    # 2. Save to CSV
+                    updated_user_df = pd.concat([user_df, new_u], ignore_index=True)
+                    updated_user_df.to_csv(USER_DB, index=False)
+                    
+                    # 3. Trigger Email
+                    send_invite_email(e, n)
+                    
+                    st.success(f"Invite sent to {e}!")
+                    
+                    # 4. REFRESH: This makes the new user appear in the list immediately
                     st.rerun()
-                else: st.error("Name and Email are mandatory.")
-        st.dataframe(user_df[["Name", "Email", "Role", "Manager"]], use_container_width=True)
+                else:
+                    st.error("Name and Email are mandatory.")
+
+        st.divider()
+
+        # --- PART 2: EDIT ROLES (FOR ADMINS) ---
+        st.subheader("👥 Active Directory & Role Management")
+        st.info("Admins: You can change Roles or Managers directly in the table below and click Save.")
+        
+        # Display the list in an editable table
+        edited_users = st.data_editor(
+            user_df[["Name", "Email", "Role", "Manager"]], 
+            use_container_width=True,
+            column_config={
+                "Role": st.column_config.SelectboxColumn("Role", options=["User", "Manager", "Admin"], required=True),
+                "Manager": st.column_config.SelectboxColumn("Manager", options=["None"] + user_df['Name'].tolist()),
+                "Email": st.column_config.TextColumn("Email", disabled=True) 
+            },
+            key="user_role_editor"
+        )
+
+        if st.button("💾 Save User Role Updates", type="primary"):
+            for i, row in edited_users.iterrows():
+                user_df.at[i, "Role"] = row["Role"]
+                user_df.at[i, "Manager"] = row["Manager"]
+            
+            user_df.to_csv(USER_DB, index=False)
+            st.success("User roles and managers updated successfully!")
+            st.rerun()
 
     # --- TAB: WD CALENDAR ---
     elif choice == "📅 WD Calendar":
