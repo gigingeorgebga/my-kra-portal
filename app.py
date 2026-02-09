@@ -11,19 +11,25 @@ st.set_page_config(page_title="BGA F&A Workflow", layout="wide")
 
 st.markdown("""
     <style>
-    /* Hide default Streamlit elements */
+    /* 1. HIDE DEFAULT ELEMENTS */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
     [data-testid="stToolbar"] {visibility: hidden !important;}
     
-    /* Overall Background */
-    .stApp { background-color: #f8f9fa; }
+    /* 2. MAIN AREA (RIGHT SIDE) - White & Clean */
+    .stApp { 
+        background-color: #ffffff; 
+    }
+    .stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp label {
+        color: #000000 !important; /* Black fonts for the main area */
+    }
     
-    /* BGA BRANDED SIDEBAR */
+    /* 3. SIDEBAR (LEFT SIDE) - BGA Navy */
     section[data-testid="stSidebar"] {
-        background-color: #1e1e3f !important; /* BGA Deep Navy */
+        background-color: #1e1e3f !important; 
         background-image: linear-gradient(180deg, #1e1e3f 0%, #25254d 100%) !important;
+        min-width: 300px !important;
     }
     
     /* Force Sidebar Text to White */
@@ -33,44 +39,45 @@ st.markdown("""
     section[data-testid="stSidebar"] h1,
     section[data-testid="stSidebar"] h2,
     section[data-testid="stSidebar"] h3,
-    section[data-testid="stSidebar"] .st-at {
+    section[data-testid="stSidebar"] span {
         color: #ffffff !important;
     }
 
-    /* Navigation Radio Text */
+    /* Radio button labels in Sidebar */
     div[data-testid="stSidebarNav"] ul li div span {
-        color: white !important;
-        font-weight: 500;
+        color: #ffffff !important;
+        font-weight: 600 !important;
     }
     
     /* Keep Logo in Original Colors */
     [data-testid="stSidebar"] img {
         filter: none !important; 
-        padding-bottom: 20px;
+        margin-bottom: 20px;
     }
 
-    /* Card Containers */
+    /* 4. DASHBOARD GRID & CARDS */
     div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
-        background-color: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        background-color: #fdfdfd;
+        padding: 15px;
+        border: 1px solid #eeeeee;
+        border-radius: 10px;
     }
     
-    /* Green Sync Button */
+    /* 5. BUTTONS */
+    /* Sync Button - Professional Green */
     div.stButton > button:first-child:contains("Sync") {
         background-color: #28a745 !important;
         color: white !important;
-        border-radius: 8px;
+        border: none !important;
     }
 
-    /* LOGOUT BUTTON - Black font as requested */
+    /* Logout Button - White background, Black Bold text */
     div.stButton > button:contains("Logout") {
         background-color: #ffffff !important;
         color: #000000 !important;
-        border: 1px solid #d1d1e0 !important;
-        font-weight: bold !important;
-        border-radius: 8px;
+        border: 1px solid #ffffff !important;
+        font-weight: 800 !important;
+        width: 100% !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -145,12 +152,17 @@ else:
     
     choice = st.sidebar.radio("Navigation", menu)
     st.sidebar.divider()
-    st.sidebar.write(f"User: **{st.session_state['user_name']}**")
+    st.sidebar.write(f"Connected: **{st.session_state['user_name']}**")
+
+    if st.sidebar.button("Logout"):
+        st.session_state.clear()
+        st.rerun()
 
     # DASHBOARD
     if choice == "📊 Dashboard":
         st.title(f"Operations Dashboard")
         
+        # Filtering for the view
         if st.session_state['role'] == "Admin": view_df = task_df
         elif st.session_state['role'] == "Manager":
             view_df = task_df[(task_df['Owner'] == st.session_state['user_name']) | (task_df['Reviewer'] == st.session_state['user_name'])]
@@ -162,33 +174,29 @@ else:
                 "SOP_Link": st.column_config.LinkColumn("🔗 SOP"),
                 "Status": st.column_config.SelectboxColumn("Status", options=["🔴 Pending", "🟡 In Progress", "🔍 QC Required", "✅ Approved"]),
                 "Reviewer": st.column_config.SelectboxColumn("Reviewer", options=user_df[user_df['Role'].isin(['Admin', 'Manager'])]['Name'].tolist()),
-                "Start_Time": st.column_config.TimeColumn("Start"),
-                "End_Time": st.column_config.TimeColumn("End"),
             },
             use_container_width=True,
             key="fa_dashboard"
         )
         
         c1, c2 = st.columns([1, 4])
-        if c1.button("💾 Sync to Database", use_container_width=True):
+        if c1.button("💾 Sync to Database"):
             task_df.update(updated_df)
             save_data(task_df, TASK_DB)
             st.toast("Sync Success!", icon="🚀")
-        c2.caption(f"Last Synced: {datetime.now().strftime('%H:%M:%S')}")
 
-    # (Keep all other pages: Assign Activity, Clients, Manage Team, Calendar)
+    # (Other pages follow same structure)
     elif choice == "➕ Assign Activity":
-        st.title("Assign New Task")
+        st.title("Assign Activity")
         with st.form("task_creation"):
             c1, c2 = st.columns(2)
             client = c1.selectbox("Client", client_df['Client_Name'].tolist() if not client_df.empty else ["No Clients"])
-            tower = c2.selectbox("Process Tower", ["O2C", "P2P", "R2R"])
+            tower = c2.selectbox("Tower", ["O2C", "P2P", "R2R"])
             act = st.text_input("Task Description")
-            c3, c4 = st.columns(2)
-            freq = c3.selectbox("Frequency", ["Daily", "Weekly", "Monthly", "Ad-hoc"])
-            wd = c4.text_input("WD Marker")
+            freq = st.selectbox("Frequency", ["Daily", "Weekly", "Monthly", "Ad-hoc"])
+            wd = st.text_input("WD Marker")
             owner = st.selectbox("Action Owner", user_df['Name'].tolist())
-            if st.form_submit_button("Confirm Assignment"):
+            if st.form_submit_button("Confirm"):
                 new_t = pd.DataFrame([{"Date": date.today().strftime("%Y-%m-%d"), "Client": client, "Tower": tower, "Activity": act, "Owner": owner, "Frequency": freq, "WD_Marker": wd, "Status": "🔴 Pending"}])
                 save_data(pd.concat([task_df, new_t], ignore_index=True), TASK_DB)
                 st.success("Task Published")
@@ -222,7 +230,3 @@ else:
             st.rerun()
         cal_e = st.data_editor(load_data(CALENDAR_DB, ["Date", "Is_Holiday"]), use_container_width=True)
         if st.button("Save"): save_data(cal_e, CALENDAR_DB)
-
-    if st.sidebar.button("Logout", use_container_width=True):
-        st.session_state.clear()
-        st.rerun()
