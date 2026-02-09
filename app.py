@@ -1,12 +1,9 @@
 import streamlit as st
 import pandas as pd
 import os
-import smtplib
-from email.mime.text import MIMEText
 from datetime import datetime, date
-import base64
 
-# --- 1. CONFIG & BGA BRANDED UI ---
+# --- 1. CONFIG & INVERTED UI STYLING ---
 st.set_page_config(page_title="BGA F&A Workflow", layout="wide")
 
 st.markdown("""
@@ -17,22 +14,24 @@ st.markdown("""
     footer {visibility: hidden;}
     [data-testid="stToolbar"] {visibility: hidden !important;}
     
-    /* 2. MAIN AREA (RIGHT SIDE) - White & Clean */
+    /* 2. MAIN CONTENT AREA (RIGHT SIDE) - Dark BGA Navy */
     .stApp { 
-        background-color: #ffffff; 
-    }
-    .stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp label {
-        color: #000000 !important; /* Black fonts for the main area */
-    }
-    
-    /* 3. SIDEBAR (LEFT SIDE) - BGA Navy */
-    section[data-testid="stSidebar"] {
         background-color: #1e1e3f !important; 
-        background-image: linear-gradient(180deg, #1e1e3f 0%, #25254d 100%) !important;
-        min-width: 300px !important;
+        color: #ffffff !important;
     }
     
-    /* Force Sidebar Text to White */
+    /* Force all text in main area to White */
+    .stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp label, .stApp span {
+        color: #ffffff !important;
+    }
+    
+    /* 3. SIDEBAR (LEFT SIDE) - Clean White */
+    section[data-testid="stSidebar"] {
+        background-color: #ffffff !important;
+        border-right: 1px solid #e0e0e0;
+    }
+    
+    /* Force Sidebar Text to Black */
     section[data-testid="stSidebar"] .stText, 
     section[data-testid="stSidebar"] label, 
     section[data-testid="stSidebar"] p,
@@ -40,29 +39,27 @@ st.markdown("""
     section[data-testid="stSidebar"] h2,
     section[data-testid="stSidebar"] h3,
     section[data-testid="stSidebar"] span {
-        color: #ffffff !important;
+        color: #000000 !important;
     }
 
-    /* Radio button labels in Sidebar */
+    /* Sidebar Navigation Radio Buttons */
     div[data-testid="stSidebarNav"] ul li div span {
-        color: #ffffff !important;
+        color: #000000 !important;
         font-weight: 600 !important;
     }
     
-    /* Keep Logo in Original Colors */
-    [data-testid="stSidebar"] img {
-        filter: none !important; 
-        margin-bottom: 20px;
-    }
-
-    /* 4. DASHBOARD GRID & CARDS */
-    div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
-        background-color: #fdfdfd;
-        padding: 15px;
-        border: 1px solid #eeeeee;
-        border-radius: 10px;
+    /* 4. DATA EDITOR / TABLES (Keep readable) */
+    /* We keep the spreadsheet area slightly light for visibility against dark bg */
+    [data-testid="stMetricValue"] {
+        color: #ffffff !important;
     }
     
+    div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
+        background-color: #2d2d5a; /* Slightly lighter navy for contrast */
+        padding: 15px;
+        border-radius: 10px;
+    }
+
     /* 5. BUTTONS */
     /* Sync Button - Professional Green */
     div.stButton > button:first-child:contains("Sync") {
@@ -71,12 +68,12 @@ st.markdown("""
         border: none !important;
     }
 
-    /* Logout Button - White background, Black Bold text */
+    /* Logout Button - Black font on Gray/White background */
     div.stButton > button:contains("Logout") {
-        background-color: #ffffff !important;
+        background-color: #f0f2f6 !important;
         color: #000000 !important;
-        border: 1px solid #ffffff !important;
-        font-weight: 800 !important;
+        border: 1px solid #d1d1e0 !important;
+        font-weight: bold !important;
         width: 100% !important;
     }
     </style>
@@ -139,11 +136,12 @@ else:
     task_df = load_data(TASK_DB, ["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Start_Time", "End_Time", "Status", "Comments"])
     client_df = load_data(CLIENT_DB, ["Client_Name"])
 
-    # Sidebar 
+    # Sidebar (White background, Black text)
     logo_path = "1 BGA Logo Colour.png"
     if os.path.exists(logo_path): st.sidebar.image(logo_path, use_container_width=True)
     
-    st.sidebar.markdown(f"### 📅 {get_current_wd()}")
+    st.sidebar.markdown(f"**Calendar Context:**")
+    st.sidebar.info(get_current_wd())
     st.sidebar.divider()
     
     menu = ["📊 Dashboard", "👤 My Profile"]
@@ -158,11 +156,10 @@ else:
         st.session_state.clear()
         st.rerun()
 
-    # DASHBOARD
+    # DASHBOARD (Dark area, White text)
     if choice == "📊 Dashboard":
         st.title(f"Operations Dashboard")
         
-        # Filtering for the view
         if st.session_state['role'] == "Admin": view_df = task_df
         elif st.session_state['role'] == "Manager":
             view_df = task_df[(task_df['Owner'] == st.session_state['user_name']) | (task_df['Reviewer'] == st.session_state['user_name'])]
@@ -173,14 +170,12 @@ else:
             column_config={
                 "SOP_Link": st.column_config.LinkColumn("🔗 SOP"),
                 "Status": st.column_config.SelectboxColumn("Status", options=["🔴 Pending", "🟡 In Progress", "🔍 QC Required", "✅ Approved"]),
-                "Reviewer": st.column_config.SelectboxColumn("Reviewer", options=user_df[user_df['Role'].isin(['Admin', 'Manager'])]['Name'].tolist()),
             },
             use_container_width=True,
             key="fa_dashboard"
         )
         
-        c1, c2 = st.columns([1, 4])
-        if c1.button("💾 Sync to Database"):
+        if st.button("💾 Sync to Database"):
             task_df.update(updated_df)
             save_data(task_df, TASK_DB)
             st.toast("Sync Success!", icon="🚀")
@@ -189,14 +184,13 @@ else:
     elif choice == "➕ Assign Activity":
         st.title("Assign Activity")
         with st.form("task_creation"):
-            c1, c2 = st.columns(2)
-            client = c1.selectbox("Client", client_df['Client_Name'].tolist() if not client_df.empty else ["No Clients"])
-            tower = c2.selectbox("Tower", ["O2C", "P2P", "R2R"])
+            client = st.selectbox("Client", client_df['Client_Name'].tolist() if not client_df.empty else ["No Clients"])
+            tower = st.selectbox("Tower", ["O2C", "P2P", "R2R"])
             act = st.text_input("Task Description")
             freq = st.selectbox("Frequency", ["Daily", "Weekly", "Monthly", "Ad-hoc"])
             wd = st.text_input("WD Marker")
             owner = st.selectbox("Action Owner", user_df['Name'].tolist())
-            if st.form_submit_button("Confirm"):
+            if st.form_submit_button("Confirm Assignment"):
                 new_t = pd.DataFrame([{"Date": date.today().strftime("%Y-%m-%d"), "Client": client, "Tower": tower, "Activity": act, "Owner": owner, "Frequency": freq, "WD_Marker": wd, "Status": "🔴 Pending"}])
                 save_data(pd.concat([task_df, new_t], ignore_index=True), TASK_DB)
                 st.success("Task Published")
