@@ -11,7 +11,7 @@ st.set_page_config(page_title="BGA F&A Workflow", layout="wide")
 
 # --- UPDATE THESE FOR EMAILS TO WORK ---
 SENDER_EMAIL = "admin@thebga.io"
-SENDER_PASSWORD = "your-16-digit-app-password" 
+SENDER_PASSWORD = "vjec elpd kuvh frqp" 
 SMTP_SERVER = "smtp.gmail.com" # Change to smtp.office365.com if using Outlook
 SMTP_PORT = 587
 
