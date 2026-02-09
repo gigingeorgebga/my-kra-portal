@@ -170,7 +170,7 @@ else:
             r = c1.selectbox("Role", ["User", "Manager", "Admin"])
             m = c2.selectbox("Reporting Manager", ["None"] + user_df['Name'].tolist())
             
-            if st.form_submit_button("Add Member & Send Invite"):
+         if st.form_submit_button("Add Member & Send Invite"):
                 if n and e:
                     # 1. Create new user data
                     new_u = pd.DataFrame([{"Name": n, "Email": e, "Role": r, "Manager": m, "Password": "welcome123"}])
@@ -179,13 +179,14 @@ else:
                     updated_user_df = pd.concat([user_df, new_u], ignore_index=True)
                     updated_user_df.to_csv(USER_DB, index=False)
                     
-                    # 3. Trigger Email
-                    send_invite_email(e, n)
+                    # 3. Trigger Email and check result
+                    email_success = send_invite_email(e, n)
                     
-                    st.success(f"Invite sent to {e}!")
-                    
-                    # 4. REFRESH: This makes the new user appear in the list immediately
-                    st.rerun()
+                    if email_success:
+                        st.success(f"✅ Invite sent to {e}!")
+                        st.rerun() # Only refresh if email worked
+                    else:
+                        st.warning("⚠️ User added to database, but email failed. Read the error message above.")
                 else:
                     st.error("Name and Email are mandatory.")
 
