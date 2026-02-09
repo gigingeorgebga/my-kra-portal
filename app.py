@@ -170,7 +170,7 @@ else:
             r = c1.selectbox("Role", ["User", "Manager", "Admin"])
             m = c2.selectbox("Reporting Manager", ["None"] + user_df['Name'].tolist())
             
-         if st.form_submit_button("Add Member & Send Invite"):
+if st.form_submit_button("Add Member & Send Invite"):
                 if n and e:
                     # 1. Create new user data
                     new_u = pd.DataFrame([{"Name": n, "Email": e, "Role": r, "Manager": m, "Password": "welcome123"}])
