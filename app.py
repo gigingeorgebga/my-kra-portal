@@ -49,13 +49,17 @@ def send_invite_email(recipient_email, recipient_name):
         msg['Subject'] = "BGA Portal Invitation"
         body = f"Hello {recipient_name},\n\nYou have been invited to the BGA F&A Workflow Portal.\n\nLogin: {recipient_email}\nTemporary Password: welcome123\n\nPlease login and begin your tasks."
         msg.attach(MIMEText(body, 'plain'))
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        
+        # Use a timeout so the app doesn't hang forever
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
         server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, recipient_email, msg.as_string())
         server.quit()
         return True
-    except:
+    except Exception as e:
+        # This will now tell us the REAL error in the browser
+        st.error(f"📧 Email Failed: {str(e)}")
         return False
 
 # --- 3. AUTHENTICATION ---
