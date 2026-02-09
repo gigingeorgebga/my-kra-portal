@@ -3,70 +3,60 @@ import pandas as pd
 import os
 from datetime import datetime, date
 
-# --- 1. CONFIG & LIGHT ASH UI STYLING ---
+# --- 1. CONFIG & HIGH-VISIBILITY STYLING ---
 st.set_page_config(page_title="BGA F&A Workflow", layout="wide")
 
 st.markdown("""
     <style>
+    /* 1. HIDE DEFAULT ELEMENTS */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
     [data-testid="stToolbar"] {visibility: hidden !important;}
     
-    /* MAIN CONTENT AREA - VERY LIGHT ASH */
+    /* 2. MAIN CONTENT AREA - VERY LIGHT ASH */
     .stApp { 
-        background-color: #f2f2f2 !important; /* Very Light Ash */
+        background-color: #f2f2f2 !important; 
+    }
+
+    /* 3. GLOBAL FONT FORCE - BLACK EVERYTHING ON RIGHT SIDE */
+    /* This targets headers, paragraphs, labels, and even data editor cells */
+    .stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp label, .stApp span, .stApp div, .stApp input {
         color: #000000 !important;
     }
-    
-    /* Force all text in main area to Black */
-    .stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp label, .stApp span {
-        color: #000000 !important;
-    }
-    
-    /* SIDEBAR - CLEAN WHITE */
+
+    /* 4. SIDEBAR - CLEAN WHITE */
     section[data-testid="stSidebar"] {
         background-color: #ffffff !important;
-        border-right: 1px solid #d1d1d1;
+        border-right: 1px solid #d1d1e0;
     }
     
-    /* Sidebar Text Fix */
-    section[data-testid="stSidebar"] .stText, 
-    section[data-testid="stSidebar"] label, 
-    section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] h1,
-    section[data-testid="stSidebar"] h2,
-    section[data-testid="stSidebar"] h3,
-    section[data-testid="stSidebar"] span {
+    /* Ensure Sidebar text is also black */
+    section[data-testid="stSidebar"] * {
         color: #000000 !important;
     }
 
-    div[data-testid="stSidebarNav"] ul li div span {
+    /* 5. DATA EDITOR SPECIFIC FIX */
+    /* Ensures the text inside the spreadsheet cells is visible */
+    [data-testid="stTable"] td, [data-testid="stDataFrame"] div {
         color: #000000 !important;
-        font-weight: 600 !important;
     }
-
-    /* DATA EDITOR CONTAINER */
+    
+    /* Card Container for tables */
     div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
-        background-color: #ffffff; /* Contrast white cards on ash background */
+        background-color: #ffffff !important;
         padding: 15px;
-        border: 1px solid #e0e0e0;
         border-radius: 10px;
+        border: 1px solid #cccccc;
     }
 
-    /* LOGOUT BUTTON */
+    /* LOGOUT BUTTON - BLACK TEXT */
     div.stButton > button:contains("Logout") {
-        background-color: #f8f9fa !important;
+        background-color: #ffffff !important;
         color: #000000 !important;
-        border: 1px solid #cccccc !important;
+        border: 1px solid #000000 !important;
         font-weight: bold !important;
         width: 100% !important;
-    }
-    
-    /* Green Sync Notification (Toast) Override */
-    [data-testid="stToast"] {
-        background-color: #28a745 !important;
-        color: white !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -123,7 +113,7 @@ if not st.session_state['logged_in']:
                         st.rerun()
                     else: st.error("Invalid Credentials")
 else:
-    # --- MAIN APP ---
+    # --- MAIN APP (LOGGED IN) ---
     user_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Manager"])
     task_df = load_data(TASK_DB, ["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Start_Time", "End_Time", "Status", "Comments"])
     client_df = load_data(CLIENT_DB, ["Client_Name"])
@@ -148,17 +138,15 @@ else:
         st.session_state.clear()
         st.rerun()
 
-    # --- DASHBOARD WITH AUTO-SAVE ---
+    # --- PAGES ---
     if choice == "📊 Dashboard":
         st.title(f"Operations Dashboard")
         
-        # Filtering logic
         if st.session_state['role'] == "Admin": view_df = task_df
         elif st.session_state['role'] == "Manager":
             view_df = task_df[(task_df['Owner'] == st.session_state['user_name']) | (task_df['Reviewer'] == st.session_state['user_name'])]
         else: view_df = task_df[task_df['Owner'] == st.session_state['user_name']]
 
-        # Data Editor
         edited_df = st.data_editor(
             view_df,
             column_config={
@@ -171,10 +159,36 @@ else:
             key="fa_editor"
         )
         
-        # AUTO-SAVE LOGIC
         if st.session_state.get("fa_editor") and st.session_state.fa_editor["edited_rows"]:
             task_df.update(edited_df)
             save_data(task_df, TASK_DB)
-            st.toast("Changes saved automatically", icon="☁️")
+            st.toast("Auto-saved!", icon="☁️")
 
-    # (Include other menu logic for Assign Activity, Clients, Team, Calendar same as previous version)
+    elif choice == "➕ Assign Activity":
+        st.title("Assign New Activity")
+        with st.form("task_form"):
+            client = st.selectbox("Client", client_df['Client_Name'].tolist() if not client_df.empty else ["No Clients"])
+            tower = st.selectbox("Tower", ["O2C", "P2P", "R2R"])
+            act = st.text_input("Task Description")
+            owner = st.selectbox("Action Owner", user_df['Name'].tolist())
+            if st.form_submit_button("Publish Task"):
+                new_t = pd.DataFrame([{"Date": date.today().strftime("%Y-%m-%d"), "Client": client, "Tower": tower, "Activity": act, "Owner": owner, "Status": "🔴 Pending"}])
+                save_data(pd.concat([task_df, new_t], ignore_index=True), TASK_DB)
+                st.success("Task Added!")
+
+    elif choice == "🏢 Clients":
+        st.title("Client List")
+        new_c = st.text_input("Client Name")
+        if st.button("Register Client"):
+            save_data(pd.concat([client_df, pd.DataFrame([{"Client_Name": new_c}])], ignore_index=True), CLIENT_DB)
+            st.rerun()
+        st.table(client_df)
+
+    elif choice == "👥 Manage Team":
+        st.title("Team Management")
+        st.table(user_df[["Name", "Email", "Role"]])
+
+    elif choice == "📅 WD Calendar":
+        st.title("Calendar Setup")
+        cal_e = st.data_editor(load_data(CALENDAR_DB, ["Date", "Is_Holiday"]), use_container_width=True)
+        if st.button("Save Calendar"): save_data(cal_e, CALENDAR_DB)
