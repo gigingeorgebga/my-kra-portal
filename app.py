@@ -8,30 +8,25 @@ st.set_page_config(page_title="BGA F&A Workflow", layout="wide")
 
 st.markdown("""
     <style>
-    /* 1. HIDE DEFAULT ELEMENTS */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
     [data-testid="stToolbar"] {visibility: hidden !important;}
     
-    /* 2. MAIN CONTENT AREA (RIGHT SIDE) - Dark BGA Navy */
+    /* MAIN CONTENT AREA - DARK BGA NAVY */
     .stApp { 
         background-color: #1e1e3f !important; 
         color: #ffffff !important;
     }
-    
-    /* Force all text in main area to White */
     .stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp label, .stApp span {
         color: #ffffff !important;
     }
     
-    /* 3. SIDEBAR (LEFT SIDE) - Clean White */
+    /* SIDEBAR - CLEAN WHITE */
     section[data-testid="stSidebar"] {
         background-color: #ffffff !important;
         border-right: 1px solid #e0e0e0;
     }
-    
-    /* Force Sidebar Text to Black */
     section[data-testid="stSidebar"] .stText, 
     section[data-testid="stSidebar"] label, 
     section[data-testid="stSidebar"] p,
@@ -42,33 +37,19 @@ st.markdown("""
         color: #000000 !important;
     }
 
-    /* Sidebar Navigation Radio Buttons */
     div[data-testid="stSidebarNav"] ul li div span {
         color: #000000 !important;
         font-weight: 600 !important;
     }
-    
-    /* 4. DATA EDITOR / TABLES (Keep readable) */
-    /* We keep the spreadsheet area slightly light for visibility against dark bg */
-    [data-testid="stMetricValue"] {
-        color: #ffffff !important;
-    }
-    
+
+    /* DATA EDITOR STYLING */
     div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
-        background-color: #2d2d5a; /* Slightly lighter navy for contrast */
+        background-color: #2d2d5a;
         padding: 15px;
         border-radius: 10px;
     }
 
-    /* 5. BUTTONS */
-    /* Sync Button - Professional Green */
-    div.stButton > button:first-child:contains("Sync") {
-        background-color: #28a745 !important;
-        color: white !important;
-        border: none !important;
-    }
-
-    /* Logout Button - Black font on Gray/White background */
+    /* LOGOUT BUTTON */
     div.stButton > button:contains("Logout") {
         background-color: #f0f2f6 !important;
         color: #000000 !important;
@@ -79,7 +60,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. DATABASE FILES ---
+# --- 2. DATA UTILITIES ---
 USER_DB, TASK_DB, CALENDAR_DB, CLIENT_DB = "users.csv", "database.csv", "calendar.csv", "clients.csv"
 
 def load_data(file, columns):
@@ -122,21 +103,21 @@ if not st.session_state['logged_in']:
             if st.button("Sign In", use_container_width=True):
                 user_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Manager"])
                 if u_email == "admin@thebga.io" and u_pass == "admin123":
-                    st.session_state.update({"logged_in": True, "user_name": "Master Admin", "role": "Admin", "user_email": u_email, "must_change": False})
+                    st.session_state.update({"logged_in": True, "user_name": "Master Admin", "role": "Admin", "user_email": u_email})
                     st.rerun()
                 elif not user_df.empty:
                     match = user_df[user_df['Email'].str.lower() == u_email]
                     if not match.empty and str(match.iloc[0]['Password']) == u_pass:
-                        st.session_state.update({"logged_in": True, "user_name": match.iloc[0]['Name'], "role": match.iloc[0]['Role'], "user_email": u_email, "must_change": (u_pass == "welcome123")})
+                        st.session_state.update({"logged_in": True, "user_name": match.iloc[0]['Name'], "role": match.iloc[0]['Role'], "user_email": u_email})
                         st.rerun()
-                    else: st.error("Incorrect details")
+                    else: st.error("Invalid Credentials")
 else:
-    # --- MAIN APP ---
-    user_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Manager", "Photo"])
+    # --- MAIN APP (LOGGED IN) ---
+    user_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Manager"])
     task_df = load_data(TASK_DB, ["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Start_Time", "End_Time", "Status", "Comments"])
     client_df = load_data(CLIENT_DB, ["Client_Name"])
 
-    # Sidebar (White background, Black text)
+    # Sidebar
     logo_path = "1 BGA Logo Colour.png"
     if os.path.exists(logo_path): st.sidebar.image(logo_path, use_container_width=True)
     
@@ -156,31 +137,37 @@ else:
         st.session_state.clear()
         st.rerun()
 
-    # DASHBOARD (Dark area, White text)
+    # --- DASHBOARD WITH AUTO-SAVE ---
     if choice == "📊 Dashboard":
         st.title(f"Operations Dashboard")
         
+        # Filtering
         if st.session_state['role'] == "Admin": view_df = task_df
         elif st.session_state['role'] == "Manager":
             view_df = task_df[(task_df['Owner'] == st.session_state['user_name']) | (task_df['Reviewer'] == st.session_state['user_name'])]
         else: view_df = task_df[task_df['Owner'] == st.session_state['user_name']]
 
-        updated_df = st.data_editor(
+        # Data Editor
+        edited_df = st.data_editor(
             view_df,
             column_config={
                 "SOP_Link": st.column_config.LinkColumn("🔗 SOP"),
                 "Status": st.column_config.SelectboxColumn("Status", options=["🔴 Pending", "🟡 In Progress", "🔍 QC Required", "✅ Approved"]),
+                "Start_Time": st.column_config.TimeColumn("Start"),
+                "End_Time": st.column_config.TimeColumn("End"),
             },
             use_container_width=True,
-            key="fa_dashboard"
+            key="fa_editor"
         )
         
-        if st.button("💾 Sync to Database"):
-            task_df.update(updated_df)
+        # AUTO-SAVE LOGIC
+        # If the state of the editor changes, update the main task_df and save to CSV
+        if st.session_state.get("fa_editor") and st.session_state.fa_editor["edited_rows"]:
+            task_df.update(edited_df)
             save_data(task_df, TASK_DB)
-            st.toast("Sync Success!", icon="🚀")
+            st.toast("Changes saved automatically", icon="☁️")
 
-    # (Other pages follow same structure)
+    # --- ASSIGN ACTIVITY ---
     elif choice == "➕ Assign Activity":
         st.title("Assign Activity")
         with st.form("task_creation"):
@@ -190,11 +177,13 @@ else:
             freq = st.selectbox("Frequency", ["Daily", "Weekly", "Monthly", "Ad-hoc"])
             wd = st.text_input("WD Marker")
             owner = st.selectbox("Action Owner", user_df['Name'].tolist())
+            reviewer = st.selectbox("Reviewer", user_df[user_df['Role'].isin(['Admin', 'Manager'])]['Name'].tolist())
             if st.form_submit_button("Confirm Assignment"):
-                new_t = pd.DataFrame([{"Date": date.today().strftime("%Y-%m-%d"), "Client": client, "Tower": tower, "Activity": act, "Owner": owner, "Frequency": freq, "WD_Marker": wd, "Status": "🔴 Pending"}])
+                new_t = pd.DataFrame([{"Date": date.today().strftime("%Y-%m-%d"), "Client": client, "Tower": tower, "Activity": act, "Owner": owner, "Reviewer": reviewer, "Frequency": freq, "WD_Marker": wd, "Status": "🔴 Pending"}])
                 save_data(pd.concat([task_df, new_t], ignore_index=True), TASK_DB)
                 st.success("Task Published")
 
+    # --- CLIENTS ---
     elif choice == "🏢 Clients":
         st.title("Client Master")
         new_c = st.text_input("Add Client")
@@ -203,6 +192,7 @@ else:
             st.rerun()
         st.dataframe(client_df, use_container_width=True)
 
+    # --- TEAM ---
     elif choice == "👥 Manage Team":
         st.title("Team Management")
         st.dataframe(user_df[["Name", "Email", "Role", "Manager"]], use_container_width=True)
@@ -214,13 +204,14 @@ else:
                 save_data(pd.concat([user_df, pd.DataFrame([{"Name":n,"Email":e,"Password":"welcome123","Role":r,"Manager":m}])], ignore_index=True), USER_DB)
                 st.rerun()
 
+    # --- CALENDAR ---
     elif choice == "📅 WD Calendar":
         st.title("Work Day Setup")
-        if st.button("Gen Month"):
+        if st.button("Auto-Gen Current Month"):
             import calendar
             y, m = date.today().year, date.today().month
             dates = [date(y, m, d).strftime("%Y-%m-%d") for d in range(1, calendar.monthrange(y, m)[1] + 1)]
             save_data(pd.DataFrame({"Date": dates, "Is_Holiday": [False]*len(dates)}), CALENDAR_DB)
             st.rerun()
         cal_e = st.data_editor(load_data(CALENDAR_DB, ["Date", "Is_Holiday"]), use_container_width=True)
-        if st.button("Save"): save_data(cal_e, CALENDAR_DB)
+        if st.button("Save Changes"): save_data(cal_e, CALENDAR_DB)
