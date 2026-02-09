@@ -37,8 +37,9 @@ def load_data(file, columns):
 def save_data(df, file):
     df.to_csv(file, index=False)
 
-# --- 4. SESSION STATE ---
+# --- 4. SESSION STATE (Added 'email' safety) ---
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
+if 'email' not in st.session_state: st.session_state['email'] = ""
 
 # --- 5. LOGIN ---
 if not st.session_state['logged_in']:
@@ -65,6 +66,11 @@ if not st.session_state['logged_in']:
 
 # --- 6. MAIN APP ---
 else:
+    # RECOVERY CHECK: If email is lost in session, force logout to prevent KeyError
+    if not st.session_state['email']:
+        st.session_state['logged_in'] = False
+        st.rerun()
+
     task_df = load_data(TASK_DB, ["Date", "Owner", "Task", "Category", "Priority", "Status", "QC_Comments"])
     user_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Status"])
 
@@ -82,34 +88,34 @@ else:
     st.sidebar.divider()
     st.sidebar.info(f"User: {st.session_state['user']}\nRole: {st.session_state['role']}")
 
-    # Security Check
-    current_pass = user_df[user_df['Email'] == st.session_state['email']]['Password'].values[0] if st.session_state['email'] != "admin@thebga.io" else "admin123"
-    if current_pass == "welcome123":
-        st.warning("⚠️ Security Alert: You are using the temporary password. Please change it in 'My Settings'.")
+    # Security Warning Logic
+    try:
+        if st.session_state['email'] != "admin@thebga.io":
+            user_row = user_df[user_df['Email'] == st.session_state['email']]
+            if not user_row.empty:
+                current_pass = user_row['Password'].values[0]
+                if current_pass == "welcome123":
+                    st.warning("⚠️ Security Alert: You are using the temporary password. Change it in 'My Settings'.")
+    except:
+        pass
 
     # --- SETTINGS PAGE ---
     if choice == "⚙️ My Settings":
         st.header("⚙️ Account Settings")
         
-        # 1. Password Change
         with st.expander("🔐 Change Password"):
             new_pass = st.text_input("Enter New Password", type="password")
             confirm_pass = st.text_input("Confirm New Password", type="password")
             if st.button("Update Password"):
-                if new_pass == confirm_pass and len(new_pass) > 4:
+                if new_pass == confirm_pass and len(new_pass) >= 6:
                     if st.session_state['email'] == "admin@thebga.io":
-                        st.error("Cannot change Master Admin password here. Use GitHub to update the code logic.")
+                        st.error("Cannot change Master Admin password here.")
                     else:
                         user_df.loc[user_df['Email'] == st.session_state['email'], 'Password'] = new_pass
                         save_data(user_df, USER_DB)
-                        st.success("Password updated successfully!")
+                        st.success("Password updated! Please log out and back in.")
                 else:
-                    st.error("Passwords do not match or are too short.")
-
-        # 2. Profile Pic (Simple visual placeholder)
-        with st.expander("🖼️ Profile Picture"):
-            pic = st.file_uploader("Upload Picture (PNG/JPG)", type=['png', 'jpg'])
-            if pic: st.image(pic, width=150)
+                    st.error("Passwords must match and be at least 6 characters.")
 
     elif choice == "👥 Manage Team":
         st.header("Team & Permissions")
@@ -138,7 +144,7 @@ else:
             t = st.text_input("Task Name")
             c = st.selectbox("Category", ["Operations", "Marketing", "Finance", "HR", "Other"])
             p = st.selectbox("Priority", ["⭐ High", "🟦 Medium", "📉 Low"])
-            o = st.selectbox("Assign To", user_df['Name'].tolist())
+            o = st.selectbox("Assign To", user_df['Name'].tolist() if not user_df.empty else ["Master Admin"])
             if st.form_submit_button("Assign"):
                 new_t = pd.DataFrame([{"Date": datetime.now().strftime("%Y-%m-%d"), "Owner":o, "Task":t, "Category":c, "Priority":p, "Status":"🔴 Pending", "QC_Comments":""}])
                 save_data(pd.concat([task_df, new_t], ignore_index=True), TASK_DB)
@@ -146,11 +152,25 @@ else:
 
     else:
         st.title(f"📊 {st.session_state['user']}'s Portal")
+        # Managers/Admins see all for QC, Users see their own
         disp = task_df if st.session_state['role'] in ["Admin", "Manager"] else task_df[task_df['Owner'] == st.session_state['user']]
-        upd = st.data_editor(disp, use_container_width=True)
+        
+        # User can only edit Status/Comments
+        is_user = st.session_state['role'] == "User"
+        upd = st.data_editor(
+            disp, 
+            use_container_width=True,
+            column_config={
+                "Task": st.column_config.TextColumn(disabled=is_user),
+                "Owner": st.column_config.TextColumn(disabled=is_user),
+                "Category": st.column_config.TextColumn(disabled=is_user),
+                "Priority": st.column_config.TextColumn(disabled=is_user),
+                "Date": st.column_config.TextColumn(disabled=True),
+            }
+        )
         if st.button("Save Changes"):
             save_data(upd, TASK_DB); st.success("Saved!")
 
     if st.sidebar.button("Logout"):
-        st.session_state['logged_in'] = False
+        st.session_state.clear()
         st.rerun()
