@@ -47,7 +47,7 @@ def send_invite_email(recipient_email, recipient_name):
         msg['From'] = SENDER_EMAIL
         msg['To'] = recipient_email
         msg['Subject'] = "BGA Portal Invitation"
-        body = f"Hello {recipient_name},\n\nYou have been invited to the BGA F&A Workflow Portal.\n\nLogin: {recipient_email}\nTemporary Password: welcome123\n\nPlease login and begin your tasks."
+        body = f"Hello {recipient_name},\n\nYou have been invited to the BGA F&A Workflow Portal.\n\n🔗 Login Here: https://my-team-planner.streamlit.app/\n\nUsername: {recipient_email}\nTemporary Password: welcome123\n\nPlease login and begin your tasks."
         msg.attach(MIMEText(body, 'plain'))
         
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
