@@ -17,18 +17,23 @@ except:
 GMAIL_USER = "admin@thebga.io" 
 GMAIL_PASSWORD = "xtck srmm ncxx tmhr" 
 
-def send_notification(receiver_email, subject, body):
-    msg = MIMEText(body)
-    msg['Subject'] = subject
+def send_invite_email(receiver_email, receiver_name):
+    app_url = "https://my-team-planner.streamlit.app/" 
+    msg = MIMEText(f"Hello {receiver_name},\n\nYou have been invited to the BGA KRA Portal.\n\nLink: {app_url}\nUser: {receiver_email}\nPass: welcome123")
+    msg['Subject'] = 'Invite: BGA KRA Portal'
     msg['From'] = GMAIL_USER
     msg['To'] = receiver_email
+    
     try:
+        # Using a more robust connection method
         server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
         server.login(GMAIL_USER, GMAIL_PASSWORD)
         server.sendmail(GMAIL_USER, receiver_email, msg.as_string())
         server.quit()
         return True
-    except: return False
+    except Exception as e:
+        st.error(f"Mail Error: {e}")
+        return False
 
 # --- 3. DATABASE ENGINE ---
 TASK_DB = "database.csv"
@@ -36,9 +41,7 @@ USER_DB = "users.csv"
 
 def load_data(file, columns):
     if not os.path.exists(file):
-        df = pd.DataFrame(columns=columns)
-        df.to_csv(file, index=False)
-        return df
+        return pd.DataFrame(columns=columns)
     return pd.read_csv(file)
 
 def save_data(df, file):
@@ -46,119 +49,90 @@ def save_data(df, file):
 
 # --- 4. SESSION STATE ---
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
-if 'user' not in st.session_state: st.session_state['user'] = ""
-if 'role' not in st.session_state: st.session_state['role'] = "User"
 
-# --- 5. LOGIN (With Recovery Mode) ---
+# --- 5. LOGIN ---
 if not st.session_state['logged_in']:
     st.header("🔑 BGA Team Login")
     user_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Status"])
-    
     u_email = st.text_input("Email").strip().lower()
     u_pass = st.text_input("Password", type="password").strip()
     
     if st.button("Login"):
-        # RECOVERY CHECK: If CSV is empty, allow this specific login to create the first Admin
-        if user_df.empty or u_email == "admin@thebga.io":
-            if u_pass == "admin123":
-                st.session_state.update({"logged_in": True, "user": "Master Admin", "role": "Admin"})
-                st.rerun()
-        
-        # NORMAL CHECK
+        # Fallback for Master Admin
+        if u_email == "admin@thebga.io" and u_pass == "admin123":
+            st.session_state.update({"logged_in": True, "user": "Master Admin", "role": "Admin"})
+            st.rerun()
         elif not user_df.empty:
             match = user_df[(user_df['Email'].str.lower() == u_email) & (user_df['Password'] == u_pass)]
             if not match.empty:
-                st.session_state.update({
-                    "logged_in": True, 
-                    "user": match.iloc[0]['Name'], 
-                    "role": match.iloc[0]['Role']
-                })
+                st.session_state.update({"logged_in": True, "user": match.iloc[0]['Name'], "role": match.iloc[0]['Role']})
                 st.rerun()
-            else: st.error("Invalid Credentials")
+            else: st.error("Invalid Login")
 
-# --- 6. DASHBOARD & WORKFLOW ---
+# --- 6. MAIN APP ---
 else:
     task_df = load_data(TASK_DB, ["Date", "Owner", "Task", "Category", "Priority", "Status", "QC_Comments"])
-    user_df = load_data(USER_DB, ["Name", "Email", "Role"])
-    
+    user_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Status"])
+
     menu = ["📊 Dashboard"]
-    if st.session_state['role'] in ["Admin", "Manager"]:
-        menu.append("➕ Assign Activity")
-    if st.session_state['role'] == "Admin":
-        menu.append("👥 Manage Team")
-    
-    choice = st.sidebar.radio("Navigation", menu)
-    st.sidebar.divider()
-    st.sidebar.info(f"User: {st.session_state['user']}\nRole: {st.session_state['role']}")
+    if st.session_state['role'] in ["Admin", "Manager"]: menu.append("➕ Assign Activity")
+    if st.session_state['role'] == "Admin": menu.append("👥 Manage Team")
+    choice = st.sidebar.radio("Nav", menu)
 
-    # --- A. TASK ASSIGNMENT ---
-    if choice == "➕ Assign Activity":
-        st.header("📝 Create Activity")
-        with st.form("new_task"):
-            col1, col2 = st.columns(2)
-            t_name = col1.text_input("Activity/Task Name")
-            t_cat = col2.selectbox("Category", ["Operations", "Marketing", "Finance", "HR", "Sales", "Other"])
-            t_prio = col1.selectbox("Priority", ["⭐ High", "🟦 Medium", "📉 Low"])
-            
-            # Get list of names, add "Master Admin" if list is empty
-            names = user_df['Name'].tolist() if not user_df.empty else ["Master Admin"]
-            assignee = st.selectbox("Assign To", names)
-            
-            if st.form_submit_button("Assign Now"):
-                new_row = pd.DataFrame([{"Date": datetime.now().strftime("%Y-%m-%d"), 
-                                         "Owner": assignee, "Task": t_name, 
-                                         "Category": t_cat, "Priority": t_prio,
-                                         "Status": "🔴 Pending", "QC_Comments": ""}])
-                save_data(pd.concat([task_df, new_row], ignore_index=True), TASK_DB)
-                st.success(f"Activity created for {assignee}!")
-
-    # --- B. DASHBOARD ---
-    elif choice == "📊 Dashboard":
-        st.title(f"📊 {st.session_state['user']}'s Portal")
-        
-        if st.session_state['role'] in ["Admin", "Manager"]:
-            display_df = task_df
-        else:
-            display_df = task_df[task_df['Owner'] == st.session_state['user']]
-
-        is_staff = st.session_state['role'] == "User"
-        
-        updated_df = st.data_editor(
-            display_df,
-            column_config={
-                "Status": st.column_config.SelectboxColumn("Status", options=["🔴 Pending", "🟡 In Progress", "🔍 QC Required", "✅ Approved"]),
-                "Priority": st.column_config.SelectboxColumn("Priority", options=["⭐ High", "🟦 Medium", "📉 Low"], disabled=is_staff),
-                "Category": st.column_config.TextColumn(disabled=is_staff),
-                "Task": st.column_config.TextColumn(disabled=is_staff),
-                "Owner": st.column_config.TextColumn(disabled=is_staff),
-            },
-            use_container_width=True,
-            num_rows="dynamic" if st.session_state['role'] == "Admin" else "fixed"
-        )
-
-        if st.button("💾 Save Changes"):
-            save_data(updated_df if st.session_state['role'] in ["Admin", "Manager"] else task_df.update(updated_df) or task_df, TASK_DB)
-            st.success("Changes saved!")
-            st.rerun()
-
-    # --- C. MANAGE TEAM ---
-    elif choice == "👥 Manage Team":
+    if choice == "👥 Manage Team":
         st.header("Team & Permissions")
         
-        # Show Current Users
+        # Display and Delete logic
         if not user_df.empty:
-            st.write("Current Team Members:")
-            st.dataframe(user_df, use_container_width=True)
-        
-        with st.form("add_user"):
-            name = st.text_input("Name")
-            email = st.text_input("Email").lower()
-            role = st.selectbox("Role", ["User", "Manager", "Admin"])
-            if st.form_submit_button("Create User"):
-                u_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Status"])
-                new_u = pd.DataFrame([{"Name":name, "Email":email, "Password":"welcome123", "Role":role, "Status":"Active"}])
-                save_data(pd.concat([u_df, new_u], ignore_index=True), USER_DB)
-                st.success(f"Created {role}: {name}. They can now login with 'welcome123'")
+            st.write("Current Team:")
+            # Adding a delete feature
+            for i, row in user_df.iterrows():
+                col_a, col_b, col_c = st.columns([3, 3, 1])
+                col_a.write(f"{row['Name']} ({row['Role']})")
+                col_b.write(row['Email'])
+                if col_c.button("🗑️", key=f"del_{i}"):
+                    user_df = user_df.drop(i)
+                    save_data(user_df, USER_DB)
+                    st.rerun()
+
+        st.divider()
+        st.subheader("Invite New Member")
+        with st.form("invite_form"):
+            n = st.text_input("Full Name")
+            e = st.text_input("Email").strip().lower()
+            r = st.selectbox("Role", ["User", "Manager", "Admin"])
+            if st.form_submit_button("Send Invite"):
+                if e in user_df['Email'].values:
+                    st.warning("⚠️ This user already exists!")
+                else:
+                    new_u = pd.DataFrame([{"Name":n, "Email":e, "Password":"welcome123", "Role":r, "Status":"Active"}])
+                    user_df = pd.concat([user_df, new_u], ignore_index=True)
+                    save_data(user_df, USER_DB)
+                    if send_invite_email(e, n):
+                        st.success(f"Invite sent to {e}!")
+                    else:
+                        st.error("User added to list, but email failed. Check spam or Gmail settings.")
+                    st.rerun()
+
+    elif choice == "➕ Assign Activity":
+        st.header("📝 Create Activity")
+        with st.form("task_form"):
+            t = st.text_input("Task Name")
+            c = st.selectbox("Category", ["Operations", "Marketing", "Finance", "Other"])
+            p = st.selectbox("Priority", ["⭐ High", "🟦 Medium", "📉 Low"])
+            o = st.selectbox("Assign To", user_df['Name'].tolist() if not user_df.empty else ["Master Admin"])
+            if st.form_submit_button("Assign"):
+                new_t = pd.DataFrame([{"Date": datetime.now().strftime("%Y-%m-%d"), "Owner":o, "Task":t, "Category":c, "Priority":p, "Status":"🔴 Pending", "QC_Comments":""}])
+                save_data(pd.concat([task_df, new_t], ignore_index=True), TASK_DB)
+                st.success("Task Assigned!")
+
+    else:
+        st.title(f"📊 {st.session_state['user']}'s Portal")
+        disp = task_df if st.session_state['role'] in ["Admin", "Manager"] else task_df[task_df['Owner'] == st.session_state['user']]
+        upd = st.data_editor(disp, use_container_width=True)
+        if st.button("Save Changes"):
+            save_data(upd, TASK_DB)
+            st.success("Saved!")
 
     if st.sidebar.button("Logout"):
         st.session_state['logged_in'] = False
