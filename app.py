@@ -3,8 +3,8 @@ import pandas as pd
 import os
 from datetime import datetime, date
 
-# --- 1. CONFIG ---
-st.set_page_config(page_title="BGA F&A Portal", layout="wide")
+# --- 1. CONFIGURATION ---
+st.set_page_config(page_title="BGA F&A Workflow", layout="wide")
 
 USER_DB, TASK_DB, CLIENT_DB, CALENDAR_DB = "users.csv", "database.csv", "clients.csv", "calendar.csv"
 LOGO_FILE = "1 BGA Logo Colour.png"
@@ -12,10 +12,13 @@ LOGO_FILE = "1 BGA Logo Colour.png"
 # --- 2. DATA ENGINE ---
 def load_db(file, cols):
     if not os.path.exists(file): return pd.DataFrame(columns=cols)
-    df = pd.read_csv(file)
-    for c in cols:
-        if c not in df.columns: df[c] = ""
-    return df
+    try:
+        df = pd.read_csv(file)
+        for c in cols:
+            if c not in df.columns: df[c] = ""
+        return df
+    except:
+        return pd.DataFrame(columns=cols)
 
 def get_current_wd():
     cal_df = load_db(CALENDAR_DB, ["Date", "Is_Holiday"])
@@ -29,19 +32,18 @@ def get_current_wd():
         if row['Date'] == today_str: return f"WD {wd_count}"
     return "Non-Working Day"
 
-# --- 3. LOGIN & BYPASS ---
+# --- 3. AUTHENTICATION ---
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 
 if not st.session_state['logged_in']:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if os.path.exists(LOGO_FILE): st.image(LOGO_FILE, width=200)
-        st.title("BGA F&A Portal Login")
-        with st.form("login"):
+        st.title("BGA Portal Login")
+        with st.form("login_gate"):
             u = st.text_input("Email").strip().lower()
             p = st.text_input("Password", type="password")
             if st.form_submit_button("Sign In", use_container_width=True):
-                # THE BYPASS
                 if u == "admin@thebga.io" and p == "admin123":
                     st.session_state.update({"logged_in": True, "user_name": "Admin", "role": "Admin"})
                     st.rerun()
@@ -53,13 +55,14 @@ if not st.session_state['logged_in']:
                         st.rerun()
                     else: st.error("Invalid Credentials")
 else:
-    # --- 4. THE COMPLETE APP ---
+    # --- 4. DATA LOADING ---
     task_df = load_db(TASK_DB, ["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Status", "Start_Time", "End_Time", "Comments"])
-    user_df = load_db(USER_DB, ["Name", "Email", "Role", "Manager"])
+    user_df = load_db(USER_DB, ["Name", "Email", "Password", "Role", "Manager"])
     client_df = load_db(CLIENT_DB, ["Client_Name"])
 
+    # SIDEBAR
     if os.path.exists(LOGO_FILE): st.sidebar.image(LOGO_FILE, use_container_width=True)
-    st.sidebar.info(f"**Current Context:** {get_current_wd()}")
+    st.sidebar.info(f"📅 **Current Context:** {get_current_wd()}")
     
     menu = ["📊 Dashboard", "➕ Assign Activity", "🏢 Clients", "👥 Manage Team", "📅 WD Calendar"]
     choice = st.sidebar.radio("Navigation", menu)
@@ -68,7 +71,7 @@ else:
         st.session_state.clear()
         st.rerun()
 
-    # DASHBOARD
+    # --- TAB: DASHBOARD (WITH SAVE BUTTON) ---
     if choice == "📊 Dashboard":
         st.header("Operations Dashboard")
         view_df = task_df if st.session_state['role'] == "Admin" else task_df[task_df['Owner'] == st.session_state['user_name']]
@@ -82,27 +85,56 @@ else:
                 "End_Time": st.column_config.TimeColumn("End")
             }
         )
-        if st.button("Save Changes"):
+        if st.button("💾 Save Dashboard Changes", type="primary"):
+            # Logic to merge edited data back to master task_df
             task_df.update(edited_df)
             task_df.to_csv(TASK_DB, index=False)
-            st.success("Database Updated!")
+            st.success("Database Updated Successfully!")
 
-    # ASSIGN ACTIVITY (REPLYING ALL FIELDS)
+    # --- TAB: ASSIGN ACTIVITY ---
     elif choice == "➕ Assign Activity":
-        st.header("New Assignment")
-        with st.form("assign"):
-            c = st.selectbox("Client", client_df['Client_Name'].tolist() if not client_df.empty else ["N/A"])
-            tow = st.selectbox("Tower", ["O2C", "P2P", "R2R"])
-            act = st.text_input("Activity")
-            sop = st.text_input("SOP Link")
-            wdm = st.text_input("WD Marker (e.g., WD 1)")
-            own = st.selectbox("Owner", user_df['Name'].tolist())
-            if st.form_submit_button("Publish"):
-                new_t = pd.DataFrame([{"Date": date.today().strftime("%Y-%m-%d"), "Client": c, "Tower": tow, "Activity": act, "SOP_Link": sop, "WD_Marker": wdm, "Owner": own, "Status": "🔴 Pending"}])
+        st.header("Create New Assignment")
+        with st.form("assign_form"):
+            col1, col2 = st.columns(2)
+            c = col1.selectbox("Client", client_df['Client_Name'].tolist() if not client_df.empty else ["No Clients"])
+            tow = col2.selectbox("Tower", ["O2C", "P2P", "R2R"])
+            act = st.text_input("Activity Description")
+            sop = st.text_input("SOP Link (URL)")
+            wdm = col1.text_input("WD Marker (e.g., WD 1)")
+            freq = col2.selectbox("Frequency", ["Daily", "Weekly", "Monthly", "Ad-hoc"])
+            own = col1.selectbox("Action Owner", user_df['Name'].tolist() if not user_df.empty else ["Admin"])
+            rev = col2.selectbox("Reviewer", user_df['Name'].tolist() if not user_df.empty else ["Admin"])
+            
+            if st.form_submit_button("Publish Task"):
+                new_t = pd.DataFrame([{
+                    "Date": date.today().strftime("%Y-%m-%d"), "Client": c, "Tower": tow, 
+                    "Activity": act, "SOP_Link": sop, "WD_Marker": wdm, "Frequency": freq,
+                    "Owner": own, "Reviewer": rev, "Status": "🔴 Pending"
+                }])
                 pd.concat([task_df, new_t], ignore_index=True).to_csv(TASK_DB, index=False)
-                st.success("Task Added!")
+                st.success("Task Published!")
 
-    # CALENDAR (RESTORED)
+    # --- TAB: MANAGE TEAM (MANDATORY ADDITIONS) ---
+    elif choice == "👥 Manage Team":
+        st.header("Team Management")
+        with st.form("team_form"):
+            col1, col2 = st.columns(2)
+            n = col1.text_input("Full Name")
+            e = col2.text_input("Email Address")
+            r = col1.selectbox("Role", ["User", "Manager", "Admin"])
+            m = col2.selectbox("Reporting Manager", ["None"] + user_df['Name'].tolist())
+            p = st.text_input("Initial Password", value="welcome123")
+            
+            if st.form_submit_button("Add Member"):
+                if n and e:
+                    new_u = pd.DataFrame([{"Name": n, "Email": e, "Role": r, "Manager": m, "Password": p}])
+                    pd.concat([user_df, new_u], ignore_index=True).to_csv(USER_DB, index=False)
+                    st.success(f"Added {n}")
+                    st.rerun()
+                else: st.error("Name and Email are mandatory.")
+        st.dataframe(user_df[["Name", "Email", "Role", "Manager"]], use_container_width=True)
+
+    # --- TAB: WD CALENDAR ---
     elif choice == "📅 WD Calendar":
         st.header("WD Calendar Setup")
         if st.button("Generate Current Month"):
@@ -115,23 +147,14 @@ else:
         if st.button("Save Calendar"):
             cal_e.to_csv(CALENDAR_DB, index=False)
             st.success("Calendar Updated!")
-            
-    # CLIENTS & TEAM (RESTORED)
+
+    # --- TAB: CLIENTS ---
     elif choice == "🏢 Clients":
         st.header("Client Master")
-        new_c = st.text_input("Client Name")
-        if st.button("Add"):
-            pd.concat([client_df, pd.DataFrame([{"Client_Name": new_c}])], ignore_index=True).to_csv(CLIENT_DB, index=False)
-            st.rerun()
+        with st.form("client_form"):
+            new_c = st.text_input("New Client Name")
+            if st.form_submit_button("Add Client"):
+                if new_c:
+                    pd.concat([client_df, pd.DataFrame([{"Client_Name": new_c}])], ignore_index=True).to_csv(CLIENT_DB, index=False)
+                    st.rerun()
         st.table(client_df)
-
-    elif choice == "👥 Manage Team":
-        st.header("Team Management")
-        with st.form("team"):
-            n = st.text_input("Name")
-            e = st.text_input("Email")
-            r = st.selectbox("Role", ["User", "Manager", "Admin"])
-            if st.form_submit_button("Add Member"):
-                pd.concat([user_df, pd.DataFrame([{"Name": n, "Email": e, "Role": r, "Password": "welcome123"}])], ignore_index=True).to_csv(USER_DB, index=False)
-                st.rerun()
-        st.dataframe(user_df[["Name", "Email", "Role"]])
