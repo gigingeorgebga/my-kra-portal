@@ -73,15 +73,26 @@ if not st.session_state['logged_in']:
             p = st.text_input("Password", type="password")
             if st.form_submit_button("Sign In", use_container_width=True):
                 if u == "admin@thebga.io" and p == "admin123":
-                    st.session_state.update({"logged_in": True, "user_name": "Admin", "role": "Admin"})
+                    st.session_state.update({
+                        "logged_in": True, 
+                        "user_name": "Admin", 
+                        "role": "Admin", 
+                        "email": u
+                    })
                     st.rerun()
                 else:
                     udf = load_db(USER_DB, ["Name", "Email", "Password", "Role"])
                     match = udf[udf['Email'].str.lower() == u]
                     if not match.empty and str(match.iloc[0]['Password']) == p:
-                        st.session_state.update({"logged_in": True, "user_name": match.iloc[0]['Name'], "role": match.iloc[0]['Role']})
+                        st.session_state.update({
+                            "logged_in": True, 
+                            "user_name": match.iloc[0]['Name'], 
+                            "role": match.iloc[0]['Role'], 
+                            "email": u
+                        })
                         st.rerun()
-                    else: st.error("Invalid Credentials")
+                    else:
+                        st.error("Invalid Credentials")
 else:
     # --- 4. DATA LOADING ---
     task_df = load_db(TASK_DB, ["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Status", "Start_Time", "End_Time", "Comments"])
