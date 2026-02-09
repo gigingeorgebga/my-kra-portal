@@ -97,13 +97,30 @@ else:
         st.session_state.clear()
         st.rerun()
 
-    # --- TAB: DASHBOARD ---
+    # --- TAB: DASHBOARD (AUTO-SAVE VERSION) ---
     if choice == "📊 Dashboard":
         st.header("Operations Dashboard")
+        
+        # 1. Define the Save Function
+        def auto_save():
+            # Get the edits from the session state
+            edits = st.session_state["dash_editor"]["edited_rows"]
+            if edits:
+                for index, changes in edits.items():
+                    for key, value in changes.items():
+                        task_df.at[int(index), key] = value
+                task_df.to_csv(TASK_DB, index=False)
+                st.toast("✅ Auto-saved changes!")
+
+        # 2. Filter view
         view_df = task_df if st.session_state['role'] == "Admin" else task_df[task_df['Owner'] == st.session_state['user_name']]
         
-        edited_df = st.data_editor(
-            view_df, use_container_width=True,
+        # 3. The Editor with Callback
+        st.data_editor(
+            view_df, 
+            use_container_width=True,
+            key="dash_editor",      # Added a key
+            on_change=auto_save,   # Trigger function on any change
             column_config={
                 "SOP_Link": st.column_config.LinkColumn("🔗 SOP"),
                 "Status": st.column_config.SelectboxColumn("Status", options=["🔴 Pending", "🟡 In Progress", "🔍 QC Required", "✅ Approved"]),
@@ -111,10 +128,7 @@ else:
                 "End_Time": st.column_config.TimeColumn("End")
             }
         )
-        if st.button("💾 Save Dashboard Changes", type="primary"):
-            task_df.update(edited_df)
-            task_df.to_csv(TASK_DB, index=False)
-            st.success("Database Updated!")
+        st.caption("💡 Changes are saved automatically as you edit.")
 
     # --- TAB: ASSIGN ACTIVITY ---
     elif choice == "➕ Assign Activity":
