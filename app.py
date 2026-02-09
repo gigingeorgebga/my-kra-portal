@@ -88,11 +88,33 @@ else:
     user_df = load_db(USER_DB, ["Name", "Email", "Password", "Role", "Manager"])
     client_df = load_db(CLIENT_DB, ["Client_Name"])
 
+    # --- 5. PASSWORD RESET CHECK (The "Gate") ---
+    # We check if the logged-in user is still using the default password
+    current_user_email = st.session_state.get('email', '').lower()
+    current_user_data = user_df[user_df['Email'].str.lower() == current_user_email]
+    
+    if st.session_state['user_name'] != "Admin" and not current_user_data.empty:
+        if current_user_data.iloc[0]['Password'] == "welcome123":
+            st.warning("🔒 Security: You must change your temporary password to proceed.")
+            with st.form("pw_reset_form"):
+                new_pw = st.text_input("Create New Password", type="password")
+                conf_pw = st.text_input("Confirm New Password", type="password")
+                if st.form_submit_button("Update Password"):
+                    if new_pw == conf_pw and len(new_pw) >= 6:
+                        # Update password in the dataframe and save to CSV
+                        user_df.loc[user_df['Email'].str.lower() == current_user_email, 'Password'] = new_pw
+                        user_df.to_csv(USER_DB, index=False)
+                        st.success("Password updated! Access granted.")
+                        st.rerun()
+                    else:
+                        st.error("Passwords must match and be at least 6 characters.")
+            st.stop() # This prevents the sidebar and dashboard from loading
+
+    # --- 6. SIDEBAR & MENU ---
     if os.path.exists(LOGO_FILE): st.sidebar.image(LOGO_FILE, use_container_width=True)
     st.sidebar.info(f"📅 **Current Context:** {get_current_wd()}")
     
-    # --- ROLE BASED MENU ---
-    # Managers and Admins get full access, Users only get the Dashboard
+    # ROLE BASED MENU
     if st.session_state['role'] in ["Admin", "Manager"]:
         menu = ["📊 Dashboard", "➕ Assign Activity", "🏢 Clients", "👥 Manage Team", "📅 WD Calendar"]
     else:
