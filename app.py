@@ -10,7 +10,7 @@ from datetime import datetime, date
 st.set_page_config(page_title="BGA F&A Workflow", layout="wide")
 
 # --- UPDATE THESE FOR EMAILS TO WORK ---
-SENDER_EMAIL = "admin@thebga.io" 
+SENDER_EMAIL = "admin@thebga.io"
 SENDER_PASSWORD = "your-16-digit-app-password" 
 SMTP_SERVER = "smtp.gmail.com" # Change to smtp.office365.com if using Outlook
 SMTP_PORT = 587
@@ -50,7 +50,6 @@ def send_invite_email(recipient_email, recipient_name):
         body = f"Hello {recipient_name},\n\nYou have been invited to the BGA F&A Workflow Portal.\n\nLogin: {recipient_email}\nTemporary Password: welcome123\n\nPlease login and begin your tasks."
         msg.attach(MIMEText(body, 'plain'))
         
-        # Use a timeout so the app doesn't hang forever
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
         server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
@@ -58,7 +57,6 @@ def send_invite_email(recipient_email, recipient_name):
         server.quit()
         return True
     except Exception as e:
-        # This will now tell us the REAL error in the browser
         st.error(f"📧 Email Failed: {str(e)}")
         return False
 
@@ -90,7 +88,6 @@ else:
     user_df = load_db(USER_DB, ["Name", "Email", "Password", "Role", "Manager"])
     client_df = load_db(CLIENT_DB, ["Client_Name"])
 
-    # SIDEBAR
     if os.path.exists(LOGO_FILE): st.sidebar.image(LOGO_FILE, use_container_width=True)
     st.sidebar.info(f"📅 **Current Context:** {get_current_wd()}")
     
@@ -101,13 +98,10 @@ else:
         st.session_state.clear()
         st.rerun()
 
-    # --- TAB: DASHBOARD (AUTO-SAVE VERSION) ---
+    # --- TAB: DASHBOARD (AUTO-SAVE) ---
     if choice == "📊 Dashboard":
         st.header("Operations Dashboard")
-        
-        # 1. Define the Save Function
         def auto_save():
-            # Get the edits from the session state
             edits = st.session_state["dash_editor"]["edited_rows"]
             if edits:
                 for index, changes in edits.items():
@@ -116,15 +110,9 @@ else:
                 task_df.to_csv(TASK_DB, index=False)
                 st.toast("✅ Auto-saved changes!")
 
-        # 2. Filter view
         view_df = task_df if st.session_state['role'] == "Admin" else task_df[task_df['Owner'] == st.session_state['user_name']]
-        
-        # 3. The Editor with Callback
         st.data_editor(
-            view_df, 
-            use_container_width=True,
-            key="dash_editor",      # Added a key
-            on_change=auto_save,   # Trigger function on any change
+            view_df, use_container_width=True, key="dash_editor", on_change=auto_save,
             column_config={
                 "SOP_Link": st.column_config.LinkColumn("🔗 SOP"),
                 "Status": st.column_config.SelectboxColumn("Status", options=["🔴 Pending", "🟡 In Progress", "🔍 QC Required", "✅ Approved"]),
@@ -157,46 +145,33 @@ else:
                 pd.concat([task_df, new_t], ignore_index=True).to_csv(TASK_DB, index=False)
                 st.success("Task Published!")
 
-    # --- TAB: MANAGE TEAM (WITH EMAIL TRIGGER) ---
+    # --- TAB: MANAGE TEAM (INVITE + ROLE EDITING) ---
     elif choice == "👥 Manage Team":
         st.header("Team Management")
-        
-        # --- PART 1: ADD / INVITE NEW MEMBER ---
         with st.form("invite_form", clear_on_submit=True):
             st.subheader("➕ Invite New Member")
             c1, c2 = st.columns(2)
-            n = c1.text_input("Full Name")
-            e = c2.text_input("Email")
+            n, e = c1.text_input("Full Name"), c2.text_input("Email")
             r = c1.selectbox("Role", ["User", "Manager", "Admin"])
             m = c2.selectbox("Reporting Manager", ["None"] + user_df['Name'].tolist())
             
-if st.form_submit_button("Add Member & Send Invite"):
+            if st.form_submit_button("Add Member & Send Invite"):
                 if n and e:
-                    # 1. Create new user data
                     new_u = pd.DataFrame([{"Name": n, "Email": e, "Role": r, "Manager": m, "Password": "welcome123"}])
+                    user_df = pd.concat([user_df, new_u], ignore_index=True)
+                    user_df.to_csv(USER_DB, index=False)
                     
-                    # 2. Save to CSV
-                    updated_user_df = pd.concat([user_df, new_u], ignore_index=True)
-                    updated_user_df.to_csv(USER_DB, index=False)
-                    
-                    # 3. Trigger Email and check result
                     email_success = send_invite_email(e, n)
-                    
                     if email_success:
                         st.success(f"✅ Invite sent to {e}!")
-                        st.rerun() # Only refresh if email worked
+                        st.rerun()
                     else:
-                        st.warning("⚠️ User added to database, but email failed. Read the error message above.")
+                        st.warning("⚠️ User added, but email failed. Check the error above.")
                 else:
                     st.error("Name and Email are mandatory.")
 
         st.divider()
-
-        # --- PART 2: EDIT ROLES (FOR ADMINS) ---
         st.subheader("👥 Active Directory & Role Management")
-        st.info("Admins: You can change Roles or Managers directly in the table below and click Save.")
-        
-        # Display the list in an editable table
         edited_users = st.data_editor(
             user_df[["Name", "Email", "Role", "Manager"]], 
             use_container_width=True,
@@ -207,14 +182,12 @@ if st.form_submit_button("Add Member & Send Invite"):
             },
             key="user_role_editor"
         )
-
         if st.button("💾 Save User Role Updates", type="primary"):
             for i, row in edited_users.iterrows():
                 user_df.at[i, "Role"] = row["Role"]
                 user_df.at[i, "Manager"] = row["Manager"]
-            
             user_df.to_csv(USER_DB, index=False)
-            st.success("User roles and managers updated successfully!")
+            st.success("User roles and managers updated!")
             st.rerun()
 
     # --- TAB: WD CALENDAR ---
