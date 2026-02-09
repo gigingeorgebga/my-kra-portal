@@ -6,10 +6,9 @@ from email.mime.text import MIMEText
 from datetime import datetime, date
 import base64
 
-# --- 1. CONFIG & PREMIUM UI STYLING ---
+# --- 1. CONFIG & HIGH-CONTRAST UI STYLING ---
 st.set_page_config(page_title="BGA F&A Workflow", layout="wide")
 
-# Custom CSS for a professional Shared Services Portal
 st.markdown("""
     <style>
     /* Hide default Streamlit elements */
@@ -19,45 +18,61 @@ st.markdown("""
     [data-testid="stToolbar"] {visibility: hidden !important;}
     
     /* Overall Background */
-    .stApp {
-        background-color: #f8f9fa;
-    }
+    .stApp { background-color: #f8f9fa; }
     
-    /* Sidebar Styling */
+    /* SIDEBAR BRIGHTNESS FIX */
     section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1e1e2f 0%, #2d2d44 100%);
-        color: white;
-    }
-    section[data-testid="stSidebar"] .stText, section[data-testid="stSidebar"] label {
-        color: #d1d1e0 !important;
+        background: linear-gradient(180deg, #0e1117 0%, #1c1f26 100%) !important;
     }
     
+    /* Force Sidebar Text to White */
+    section[data-testid="stSidebar"] .stText, 
+    section[data-testid="stSidebar"] label, 
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] h1,
+    section[data-testid="stSidebar"] .st-at {
+        color: #ffffff !important;
+        font-weight: 500 !important;
+    }
+
+    /* Make Radio Button Labels White */
+    div[data-testid="stSidebarNav"] ul li div span {
+        color: white !important;
+    }
+    
+    /* Make the BGA Logo White */
+    [data-testid="stSidebar"] img {
+        filter: brightness(0) invert(1);
+        padding-bottom: 20px;
+    }
+
     /* Card-like containers for data */
     div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
         background-color: white;
         padding: 20px;
         border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
     
-    /* Custom Button Styling */
+    /* Button Styling */
     .stButton>button {
         border-radius: 8px;
         font-weight: 600;
         transition: all 0.3s ease;
     }
     
-    /* Specific styling for the Save button */
-    div.stButton > button:first-child {
-        background-color: #28a745;
-        color: white;
+    /* Green Sync Button */
+    div.stButton > button:first-child:contains("Sync") {
+        background-color: #28a745 !important;
+        color: white !important;
         border: none;
     }
-    
-    /* Metrics styling */
-    [data-testid="stMetricValue"] {
-        font-size: 24px;
-        color: #4b49ac;
+
+    /* Logout Button Styling */
+    div.stButton > button:contains("Logout") {
+        background-color: #dc3545 !important;
+        color: white !important;
+        border: none;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -97,8 +112,8 @@ if not st.session_state['logged_in']:
     col_l, col_r = st.columns([1, 1])
     with col_l:
         st.image("1 BGA Logo Colour.png", width=200)
-        st.title("F&A Operations Portal")
-        st.caption("Shared Services Workflow & Productivity Tracking")
+        st.title("BGA F&A Portal")
+        st.caption("Operations & Productivity Tracking")
     with col_r:
         with st.container(border=True):
             u_email = st.text_input("Email").strip().lower()
@@ -115,15 +130,17 @@ if not st.session_state['logged_in']:
                         st.rerun()
                     else: st.error("Incorrect details")
 else:
-    # --- 6. MAIN APP (LOGGED IN) ---
+    # --- MAIN APP (LOGGED IN) ---
     user_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Manager", "Photo"])
     task_df = load_data(TASK_DB, ["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Start_Time", "End_Time", "Status", "Comments"])
     client_df = load_data(CLIENT_DB, ["Client_Name"])
 
-    # Sidebar Logo and Info
+    # Sidebar 
     logo_path = "1 BGA Logo Colour.png"
     if os.path.exists(logo_path): st.sidebar.image(logo_path, use_container_width=True)
-    st.sidebar.metric("Calendar Context", get_current_wd())
+    
+    st.sidebar.subheader(f"📅 {get_current_wd()}")
+    st.sidebar.divider()
     
     menu = ["📊 Dashboard", "👤 My Profile"]
     if st.session_state['role'] in ["Admin", "Manager"]: menu.extend(["➕ Assign Activity", "🏢 Clients"])
@@ -131,30 +148,17 @@ else:
     
     choice = st.sidebar.radio("Navigation", menu)
     st.sidebar.divider()
-    st.sidebar.caption(f"Connected: {st.session_state['user_name']}")
+    st.sidebar.write(f"Connected: **{st.session_state['user_name']}**")
 
-    # --- PASSWORD RESET LOGIC ---
-    if st.session_state.get('must_change'):
-        st.warning("Please update your password to continue.")
-        new_p = st.text_input("New Password", type="password")
-        if st.button("Unlock"):
-            user_df.loc[user_df['Email'] == st.session_state['user_email'], 'Password'] = new_p
-            save_data(user_df, USER_DB)
-            st.session_state['must_change'] = False
-            st.rerun()
-        st.stop()
-
-    # --- DASHBOARD ---
+    # DASHBOARD
     if choice == "📊 Dashboard":
-        st.title(f"Today's Activities")
+        st.title(f"Operations Dashboard")
         
-        # Filter Logic
         if st.session_state['role'] == "Admin": view_df = task_df
         elif st.session_state['role'] == "Manager":
             view_df = task_df[(task_df['Owner'] == st.session_state['user_name']) | (task_df['Reviewer'] == st.session_state['user_name'])]
         else: view_df = task_df[task_df['Owner'] == st.session_state['user_name']]
 
-        # Styled Data Editor
         updated_df = st.data_editor(
             view_df,
             column_config={
@@ -165,7 +169,6 @@ else:
                 "End_Time": st.column_config.TimeColumn("End"),
             },
             use_container_width=True,
-            num_rows="fixed",
             key="fa_dashboard"
         )
         
@@ -174,9 +177,9 @@ else:
             task_df.update(updated_df)
             save_data(task_df, TASK_DB)
             st.toast("Sync Success!", icon="🚀")
-        c2.caption(f"System Time: {datetime.now().strftime('%H:%M:%S')}")
+        c2.caption(f"Last Synced: {datetime.now().strftime('%H:%M:%S')}")
 
-    # --- ASSIGN ACTIVITY ---
+    # (Other pages like Assign Activity, Clients, etc. follow the same logic as previous version)
     elif choice == "➕ Assign Activity":
         st.title("Assign New Task")
         with st.container(border=True):
@@ -201,7 +204,6 @@ else:
                     save_data(pd.concat([task_df, new_t], ignore_index=True), TASK_DB)
                     st.success("Task Published")
 
-    # --- CLIENTS & TEAM & CALENDAR (Simplified UI) ---
     elif choice == "🏢 Clients":
         st.title("Client Master")
         new_c = st.text_input("Add Client")
@@ -209,16 +211,6 @@ else:
             save_data(pd.concat([client_df, pd.DataFrame([{"Client_Name": new_c}])], ignore_index=True), CLIENT_DB)
             st.rerun()
         st.dataframe(client_df, use_container_width=True)
-
-    elif choice == "👥 Manage Team":
-        st.title("Team Management")
-        st.dataframe(user_df[["Name", "Email", "Role", "Manager"]], use_container_width=True)
-        with st.expander("Add New Team Member"):
-            n, e, r = st.text_input("Full Name"), st.text_input("Email"), st.selectbox("Access Level", ["User", "Manager", "Admin"])
-            m = st.selectbox("Manager", user_df[user_df['Role'].isin(['Admin', 'Manager'])]['Name'].tolist())
-            if st.button("Register"):
-                save_data(pd.concat([user_df, pd.DataFrame([{"Name":n,"Email":e,"Password":"welcome123","Role":r,"Manager":m}])], ignore_index=True), USER_DB)
-                st.rerun()
 
     elif choice == "📅 WD Calendar":
         st.title("Work Day Calendar")
@@ -230,6 +222,16 @@ else:
             st.rerun()
         cal_data = st.data_editor(load_data(CALENDAR_DB, ["Date", "Is_Holiday"]), use_container_width=True)
         if st.button("Save Changes"): save_data(cal_data, CALENDAR_DB)
+
+    elif choice == "👥 Manage Team":
+        st.title("Team Management")
+        st.dataframe(user_df[["Name", "Email", "Role", "Manager"]], use_container_width=True)
+        with st.expander("Add New Team Member"):
+            n, e, r = st.text_input("Full Name"), st.text_input("Email"), st.selectbox("Access Level", ["User", "Manager", "Admin"])
+            m = st.selectbox("Manager", user_df[user_df['Role'].isin(['Admin', 'Manager'])]['Name'].tolist())
+            if st.button("Register"):
+                save_data(pd.concat([user_df, pd.DataFrame([{"Name":n,"Email":e,"Password":"welcome123","Role":r,"Manager":m}])], ignore_index=True), USER_DB)
+                st.rerun()
 
     if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.clear()
