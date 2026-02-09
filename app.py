@@ -3,166 +3,135 @@ import pandas as pd
 import os
 from datetime import datetime, date
 
-# --- 1. CORE CONFIGURATION ---
+# --- 1. CONFIG ---
 st.set_page_config(page_title="BGA F&A Portal", layout="wide")
 
-# File Path Constants
-USER_DB = "users.csv"
-TASK_DB = "database.csv"
-CLIENT_DB = "clients.csv"
-CALENDAR_DB = "calendar.csv"
+USER_DB, TASK_DB, CLIENT_DB, CALENDAR_DB = "users.csv", "database.csv", "clients.csv", "calendar.csv"
 LOGO_FILE = "1 BGA Logo Colour.png"
 
-# --- 2. THE BYPASS LOGIN LOGIC ---
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
+# --- 2. DATA ENGINE ---
+def load_db(file, cols):
+    if not os.path.exists(file): return pd.DataFrame(columns=cols)
+    df = pd.read_csv(file)
+    for c in cols:
+        if c not in df.columns: df[c] = ""
+    return df
 
-# LOGIN UI
+def get_current_wd():
+    cal_df = load_db(CALENDAR_DB, ["Date", "Is_Holiday"])
+    if cal_df.empty: return "WD Not Set"
+    cal_df['Is_Holiday'] = cal_df['Is_Holiday'].astype(str).str.lower() == 'true'
+    working_days = cal_df[cal_df['Is_Holiday'] == False].sort_values('Date')
+    today_str = date.today().strftime("%Y-%m-%d")
+    wd_count = 0
+    for _, row in working_days.iterrows():
+        wd_count += 1
+        if row['Date'] == today_str: return f"WD {wd_count}"
+    return "Non-Working Day"
+
+# --- 3. LOGIN & BYPASS ---
+if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
+
 if not st.session_state['logged_in']:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if os.path.exists(LOGO_FILE):
-            st.image(LOGO_FILE, width=200)
+        if os.path.exists(LOGO_FILE): st.image(LOGO_FILE, width=200)
         st.title("BGA F&A Portal Login")
-        
-        with st.form("login_gate"):
-            u_email = st.text_input("Email Address").strip().lower()
-            u_pass = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("Sign In", use_container_width=True)
-            
-            if submitted:
-                # CRITICAL BYPASS: This check happens before any files are read
-                if u_email == "admin@thebga.io" and u_pass == "admin123":
-                    st.session_state.update({
-                        "logged_in": True,
-                        "user_name": "Master Admin",
-                        "role": "Admin",
-                        "user_email": u_email
-                    })
+        with st.form("login"):
+            u = st.text_input("Email").strip().lower()
+            p = st.text_input("Password", type="password")
+            if st.form_submit_button("Sign In", use_container_width=True):
+                # THE BYPASS
+                if u == "admin@thebga.io" and p == "admin123":
+                    st.session_state.update({"logged_in": True, "user_name": "Admin", "role": "Admin"})
                     st.rerun()
                 else:
-                    # Secondary check for users in the database
-                    if os.path.exists(USER_DB):
-                        udf = pd.read_csv(USER_DB)
-                        match = udf[udf['Email'].str.lower() == u_email]
-                        if not match.empty and str(match.iloc[0]['Password']) == u_pass:
-                            st.session_state.update({
-                                "logged_in": True,
-                                "user_name": match.iloc[0]['Name'],
-                                "role": match.iloc[0]['Role'],
-                                "user_email": u_email
-                            })
-                            st.rerun()
-                        else:
-                            st.error("❌ Invalid Email or Password.")
-                    else:
-                        st.error("❌ Database not found. Please use Admin Login.")
-
-# --- 3. THE MAIN APPLICATION (POST-LOGIN) ---
+                    udf = load_db(USER_DB, ["Name", "Email", "Password", "Role"])
+                    match = udf[udf['Email'].str.lower() == u]
+                    if not match.empty and str(match.iloc[0]['Password']) == p:
+                        st.session_state.update({"logged_in": True, "user_name": match.iloc[0]['Name'], "role": match.iloc[0]['Role']})
+                        st.rerun()
+                    else: st.error("Invalid Credentials")
 else:
-    # DATA LOADING UTILITIES
-    def load_full_db(file, cols):
-        if not os.path.exists(file): return pd.DataFrame(columns=cols)
-        df = pd.read_csv(file)
-        for c in cols:
-            if c not in df.columns: df[c] = ""
-        return df
+    # --- 4. THE COMPLETE APP ---
+    task_df = load_db(TASK_DB, ["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Status", "Start_Time", "End_Time", "Comments"])
+    user_df = load_db(USER_DB, ["Name", "Email", "Role", "Manager"])
+    client_df = load_db(CLIENT_DB, ["Client_Name"])
 
-    # LOAD ALL DATA
-    task_df = load_full_db(TASK_DB, ["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Status", "Comments"])
-    user_df = load_full_db(USER_DB, ["Name", "Email", "Password", "Role", "Manager"])
-    client_df = load_full_db(CLIENT_DB, ["Client_Name"])
-
-    # SIDEBAR
-    if os.path.exists(LOGO_FILE):
-        st.sidebar.image(LOGO_FILE, use_container_width=True)
-    st.sidebar.markdown(f"**User:** {st.session_state['user_name']}")
-    st.sidebar.markdown(f"**Role:** {st.session_state['role']}")
+    if os.path.exists(LOGO_FILE): st.sidebar.image(LOGO_FILE, use_container_width=True)
+    st.sidebar.info(f"**Current Context:** {get_current_wd()}")
     
-    menu = ["📊 Dashboard", "➕ Assign Activity", "🏢 Clients", "👥 Manage Team"]
+    menu = ["📊 Dashboard", "➕ Assign Activity", "🏢 Clients", "👥 Manage Team", "📅 WD Calendar"]
     choice = st.sidebar.radio("Navigation", menu)
     
-    if st.sidebar.button("Logout", use_container_width=True):
+    if st.sidebar.button("Logout"):
         st.session_state.clear()
         st.rerun()
 
-    # --- TAB: DASHBOARD ---
+    # DASHBOARD
     if choice == "📊 Dashboard":
-        st.title("Operations Dashboard")
+        st.header("Operations Dashboard")
+        view_df = task_df if st.session_state['role'] == "Admin" else task_df[task_df['Owner'] == st.session_state['user_name']]
         
-        # Admin sees everything; Users see their own
-        if st.session_state['role'] == "Admin":
-            display_df = task_df
-        else:
-            display_df = task_df[task_df['Owner'] == st.session_state['user_name']]
-
         edited_df = st.data_editor(
-            display_df, 
-            use_container_width=True,
+            view_df, use_container_width=True,
             column_config={
                 "SOP_Link": st.column_config.LinkColumn("🔗 SOP"),
-                "Status": st.column_config.SelectboxColumn("Status", options=["🔴 Pending", "🟡 In Progress", "🔍 QC Required", "✅ Approved"])
+                "Status": st.column_config.SelectboxColumn("Status", options=["🔴 Pending", "🟡 In Progress", "🔍 QC Required", "✅ Approved"]),
+                "Start_Time": st.column_config.TimeColumn("Start"),
+                "End_Time": st.column_config.TimeColumn("End")
             }
         )
-        
-        if st.button("Save Changes", type="primary"):
-            # Update master dataframe and save
+        if st.button("Save Changes"):
             task_df.update(edited_df)
             task_df.to_csv(TASK_DB, index=False)
-            st.success("✅ Changes successfully saved to Database!")
+            st.success("Database Updated!")
 
-    # --- TAB: MANAGE TEAM ---
-    elif choice == "👥 Manage Team":
-        st.title("Team Management")
-        with st.form("new_user_form"):
-            col1, col2 = st.columns(2)
-            new_n = col1.text_input("Full Name")
-            new_e = col2.text_input("Email Address")
-            new_r = col1.selectbox("Role", ["User", "Manager", "Admin"])
-            new_m = col2.selectbox("Manager", ["None"] + user_df['Name'].tolist())
+    # ASSIGN ACTIVITY (REPLYING ALL FIELDS)
+    elif choice == "➕ Assign Activity":
+        st.header("New Assignment")
+        with st.form("assign"):
+            c = st.selectbox("Client", client_df['Client_Name'].tolist() if not client_df.empty else ["N/A"])
+            tow = st.selectbox("Tower", ["O2C", "P2P", "R2R"])
+            act = st.text_input("Activity")
+            sop = st.text_input("SOP Link")
+            wdm = st.text_input("WD Marker (e.g., WD 1)")
+            own = st.selectbox("Owner", user_df['Name'].tolist())
+            if st.form_submit_button("Publish"):
+                new_t = pd.DataFrame([{"Date": date.today().strftime("%Y-%m-%d"), "Client": c, "Tower": tow, "Activity": act, "SOP_Link": sop, "WD_Marker": wdm, "Owner": own, "Status": "🔴 Pending"}])
+                pd.concat([task_df, new_t], ignore_index=True).to_csv(TASK_DB, index=False)
+                st.success("Task Added!")
+
+    # CALENDAR (RESTORED)
+    elif choice == "📅 WD Calendar":
+        st.header("WD Calendar Setup")
+        if st.button("Generate Current Month"):
+            import calendar
+            today = date.today()
+            dates = [date(today.year, today.month, d).strftime("%Y-%m-%d") for d in range(1, calendar.monthrange(today.year, today.month)[1] + 1)]
+            pd.DataFrame({"Date": dates, "Is_Holiday": [False]*len(dates)}).to_csv(CALENDAR_DB, index=False)
+            st.rerun()
+        cal_e = st.data_editor(load_db(CALENDAR_DB, ["Date", "Is_Holiday"]), use_container_width=True)
+        if st.button("Save Calendar"):
+            cal_e.to_csv(CALENDAR_DB, index=False)
+            st.success("Calendar Updated!")
             
-            if st.form_submit_button("Register Member"):
-                if new_n and new_e:
-                    new_row = pd.DataFrame([{"Name": new_n, "Email": new_e, "Role": new_r, "Manager": new_m, "Password": "welcome123"}])
-                    updated_users = pd.concat([user_df, new_row], ignore_index=True)
-                    updated_users.to_csv(USER_DB, index=False)
-                    st.success(f"User {new_n} has been registered!")
-                    st.rerun()
-                else:
-                    st.error("Please fill in Name and Email.")
-        
-        st.subheader("Active Directory")
-        st.dataframe(user_df[["Name", "Email", "Role", "Manager"]], use_container_width=True)
-
-    # --- TAB: CLIENTS ---
+    # CLIENTS & TEAM (RESTORED)
     elif choice == "🏢 Clients":
-        st.title("Client Master List")
-        with st.form("client_entry"):
-            c_name = st.text_input("New Client Name")
-            if st.form_submit_button("Add Client"):
-                if c_name:
-                    new_c = pd.DataFrame([{"Client_Name": c_name}])
-                    updated_clients = pd.concat([client_df, new_c], ignore_index=True)
-                    updated_clients.to_csv(CLIENT_DB, index=False)
-                    st.success("Client registered.")
-                    st.rerun()
+        st.header("Client Master")
+        new_c = st.text_input("Client Name")
+        if st.button("Add"):
+            pd.concat([client_df, pd.DataFrame([{"Client_Name": new_c}])], ignore_index=True).to_csv(CLIENT_DB, index=False)
+            st.rerun()
         st.table(client_df)
 
-    # --- TAB: ASSIGN ACTIVITY ---
-    elif choice == "➕ Assign Activity":
-        st.title("Create New Assignment")
-        with st.form("task_entry"):
-            t_client = st.selectbox("Client", client_df['Client_Name'].tolist() if not client_df.empty else ["N/A"])
-            t_tower = st.selectbox("Tower", ["O2C", "P2P", "R2R"])
-            t_desc = st.text_input("Activity Description")
-            t_owner = st.selectbox("Owner", user_df['Name'].tolist() if not user_df.empty else ["Admin"])
-            
-            if st.form_submit_button("Publish Task"):
-                new_t = pd.DataFrame([{
-                    "Date": date.today().strftime("%Y-%m-%d"),
-                    "Client": t_client, "Tower": t_tower, "Activity": t_desc,
-                    "Owner": t_owner, "Status": "🔴 Pending"
-                }])
-                updated_tasks = pd.concat([task_df, new_t], ignore_index=True)
-                updated_tasks.to_csv(TASK_DB, index=False)
-                st.success("Task Published!")
+    elif choice == "👥 Manage Team":
+        st.header("Team Management")
+        with st.form("team"):
+            n = st.text_input("Name")
+            e = st.text_input("Email")
+            r = st.selectbox("Role", ["User", "Manager", "Admin"])
+            if st.form_submit_button("Add Member"):
+                pd.concat([user_df, pd.DataFrame([{"Name": n, "Email": e, "Role": r, "Password": "welcome123"}])], ignore_index=True).to_csv(USER_DB, index=False)
+                st.rerun()
+        st.dataframe(user_df[["Name", "Email", "Role"]])
