@@ -5,8 +5,15 @@ import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime
 
-# --- 1. CONFIG ---
+# --- 1. CONFIG & LOGO ---
 st.set_page_config(page_title="BGA KRA Management", layout="wide")
+
+# Force logo check - ensures it doesn't crash the app if missing
+logo_path = "1 BGA Logo Colour.png"
+if os.path.exists(logo_path):
+    st.sidebar.image(logo_path, use_container_width=True)
+else:
+    st.sidebar.title("BGA PORTAL")
 
 # --- 2. GMAIL ENGINE ---
 GMAIL_USER = "admin@thebga.io" 
@@ -14,7 +21,7 @@ GMAIL_PASSWORD = "xtck srmm ncxx tmhr"
 
 def send_invite_email(receiver_email, receiver_name):
     app_url = "https://my-team-planner.streamlit.app/" 
-    msg = MIMEText(f"Hello {receiver_name},\n\nYou have been invited to the BGA KRA Portal.\n\nLink: {app_url}\nUser: {receiver_email}\nPass: welcome123")
+    msg = MIMEText(f"Hello {receiver_name},\n\nInvite: {app_url}\nUser: {receiver_email}\nPass: welcome123")
     msg['Subject'] = 'Invite: BGA KRA Portal'
     msg['From'] = GMAIL_USER
     msg['To'] = receiver_email
@@ -27,149 +34,120 @@ def send_invite_email(receiver_email, receiver_name):
     except: return False
 
 # --- 3. DATABASE ENGINE ---
-TASK_DB = "database.csv"
 USER_DB = "users.csv"
+TASK_DB = "database.csv"
 
 def load_data(file, columns):
     if not os.path.exists(file): return pd.DataFrame(columns=columns)
-    return pd.read_csv(file)
+    try:
+        return pd.read_csv(file)
+    except:
+        return pd.DataFrame(columns=columns)
 
 def save_data(df, file):
     df.to_csv(file, index=False)
 
-# --- 4. SESSION STATE (Added 'email' safety) ---
+# --- 4. SESSION STATE ---
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
-if 'email' not in st.session_state: st.session_state['email'] = ""
+if 'user_email' not in st.session_state: st.session_state['user_email'] = ""
 
-# --- 5. LOGIN ---
+# --- 5. LOGIN PAGE ---
 if not st.session_state['logged_in']:
     st.header("🔑 BGA Team Login")
     user_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Status"])
+    
     u_email = st.text_input("Email").strip().lower()
     u_pass = st.text_input("Password", type="password").strip()
     
     if st.button("Login"):
+        # 1. Master Recovery Login
         if u_email == "admin@thebga.io" and u_pass == "admin123":
-            st.session_state.update({"logged_in": True, "user": "Master Admin", "role": "Admin", "email": u_email})
+            st.session_state.update({"logged_in": True, "user_name": "Master Admin", "role": "Admin", "user_email": u_email})
             st.rerun()
+        
+        # 2. Database Login
         elif not user_df.empty:
-            match = user_df[(user_df['Email'].str.lower() == u_email) & (user_df['Password'] == u_pass)]
+            # Case-insensitive email match
+            match = user_df[user_df['Email'].str.lower() == u_email]
             if not match.empty:
-                st.session_state.update({
-                    "logged_in": True, 
-                    "user": match.iloc[0]['Name'], 
-                    "role": match.iloc[0]['Role'],
-                    "email": match.iloc[0]['Email']
-                })
-                st.rerun()
-            else: st.error("Invalid Login")
+                if str(match.iloc[0]['Password']) == u_pass:
+                    st.session_state.update({
+                        "logged_in": True, 
+                        "user_name": match.iloc[0]['Name'], 
+                        "role": match.iloc[0]['Role'],
+                        "user_email": u_email
+                    })
+                    st.rerun()
+                else:
+                    st.error("Incorrect Password.")
+            else:
+                st.error("Email not found in database.")
+        else:
+            st.error("Database is empty. Use Master Admin to start.")
 
-# --- 6. MAIN APP ---
+# --- 6. MAIN APPLICATION ---
 else:
-    # RECOVERY CHECK: If email is lost in session, force logout to prevent KeyError
-    if not st.session_state['email']:
+    # Double check session integrity
+    if not st.session_state.get('user_email'):
         st.session_state['logged_in'] = False
         st.rerun()
 
     task_df = load_data(TASK_DB, ["Date", "Owner", "Task", "Category", "Priority", "Status", "QC_Comments"])
     user_df = load_data(USER_DB, ["Name", "Email", "Password", "Role", "Status"])
 
-    # Sidebar
-    try:
-        st.sidebar.image("1 BGA Logo Colour.png", use_container_width=True)
-    except:
-        st.sidebar.title("BGA Portal")
-
+    # Sidebar Navigation
     menu = ["📊 Dashboard", "⚙️ My Settings"]
     if st.session_state['role'] in ["Admin", "Manager"]: menu.append("➕ Assign Activity")
     if st.session_state['role'] == "Admin": menu.append("👥 Manage Team")
     
-    choice = st.sidebar.radio("Nav", menu)
+    choice = st.sidebar.radio("Navigation", menu)
     st.sidebar.divider()
-    st.sidebar.info(f"User: {st.session_state['user']}\nRole: {st.session_state['role']}")
-
-    # Security Warning Logic
-    try:
-        if st.session_state['email'] != "admin@thebga.io":
-            user_row = user_df[user_df['Email'] == st.session_state['email']]
-            if not user_row.empty:
-                current_pass = user_row['Password'].values[0]
-                if current_pass == "welcome123":
-                    st.warning("⚠️ Security Alert: You are using the temporary password. Change it in 'My Settings'.")
-    except:
-        pass
+    st.sidebar.write(f"**User:** {st.session_state['user_name']}")
+    st.sidebar.write(f"**Role:** {st.session_state['role']}")
 
     # --- SETTINGS PAGE ---
     if choice == "⚙️ My Settings":
         st.header("⚙️ Account Settings")
-        
         with st.expander("🔐 Change Password"):
-            new_pass = st.text_input("Enter New Password", type="password")
-            confirm_pass = st.text_input("Confirm New Password", type="password")
-            if st.button("Update Password"):
-                if new_pass == confirm_pass and len(new_pass) >= 6:
-                    if st.session_state['email'] == "admin@thebga.io":
+            new_p = st.text_input("New Password", type="password")
+            conf_p = st.text_input("Confirm Password", type="password")
+            if st.button("Update"):
+                if new_p == conf_p and len(new_p) >= 6:
+                    if st.session_state['user_email'] == "admin@thebga.io":
                         st.error("Cannot change Master Admin password here.")
                     else:
-                        user_df.loc[user_df['Email'] == st.session_state['email'], 'Password'] = new_pass
+                        user_df.loc[user_df['Email'] == st.session_state['user_email'], 'Password'] = new_p
                         save_data(user_df, USER_DB)
-                        st.success("Password updated! Please log out and back in.")
+                        st.success("Password updated!")
                 else:
-                    st.error("Passwords must match and be at least 6 characters.")
+                    st.error("Passwords must match and be 6+ characters.")
 
+    # --- MANAGE TEAM ---
     elif choice == "👥 Manage Team":
-        st.header("Team & Permissions")
-        if not user_df.empty:
-            for i, row in user_df.iterrows():
-                col_a, col_b, col_c = st.columns([3, 3, 1])
-                col_a.write(f"{row['Name']} ({row['Role']})")
-                col_b.write(row['Email'])
-                if col_c.button("🗑️", key=f"del_{i}"):
-                    user_df = user_df.drop(i); save_data(user_df, USER_DB); st.rerun()
-
-        st.subheader("Invite New Member")
-        with st.form("invite_form"):
-            n, e, r = st.text_input("Name"), st.text_input("Email").strip().lower(), st.selectbox("Role", ["User", "Manager", "Admin"])
-            if st.form_submit_button("Send Invite"):
-                if e in user_df['Email'].values: st.warning("User exists!")
+        st.header("Team Management")
+        st.dataframe(user_df[["Name", "Email", "Role", "Status"]], use_container_width=True)
+        
+        with st.form("invite"):
+            n, e, r = st.text_input("Name"), st.text_input("Email").lower(), st.selectbox("Role", ["User", "Manager", "Admin"])
+            if st.form_submit_button("Invite"):
+                if e in user_df['Email'].values: st.warning("Already exists!")
                 else:
                     new_u = pd.DataFrame([{"Name":n, "Email":e, "Password":"welcome123", "Role":r, "Status":"Active"}])
                     save_data(pd.concat([user_df, new_u], ignore_index=True), USER_DB)
-                    if send_invite_email(e, n): st.success(f"Invite sent to {e}!")
+                    send_invite_email(e, n)
+                    st.success("Invited!")
                     st.rerun()
 
-    elif choice == "➕ Assign Activity":
-        st.header("📝 Create Activity")
-        with st.form("task_form"):
-            t = st.text_input("Task Name")
-            c = st.selectbox("Category", ["Operations", "Marketing", "Finance", "HR", "Other"])
-            p = st.selectbox("Priority", ["⭐ High", "🟦 Medium", "📉 Low"])
-            o = st.selectbox("Assign To", user_df['Name'].tolist() if not user_df.empty else ["Master Admin"])
-            if st.form_submit_button("Assign"):
-                new_t = pd.DataFrame([{"Date": datetime.now().strftime("%Y-%m-%d"), "Owner":o, "Task":t, "Category":c, "Priority":p, "Status":"🔴 Pending", "QC_Comments":""}])
-                save_data(pd.concat([task_df, new_t], ignore_index=True), TASK_DB)
-                st.success("Task Assigned!")
-
+    # --- DASHBOARD ---
     else:
-        st.title(f"📊 {st.session_state['user']}'s Portal")
-        # Managers/Admins see all for QC, Users see their own
-        disp = task_df if st.session_state['role'] in ["Admin", "Manager"] else task_df[task_df['Owner'] == st.session_state['user']]
+        st.title(f"📊 {st.session_state['user_name']}'s Dashboard")
+        is_admin = st.session_state['role'] in ["Admin", "Manager"]
+        disp = task_df if is_admin else task_df[task_df['Owner'] == st.session_state['user_name']]
         
-        # User can only edit Status/Comments
-        is_user = st.session_state['role'] == "User"
-        upd = st.data_editor(
-            disp, 
-            use_container_width=True,
-            column_config={
-                "Task": st.column_config.TextColumn(disabled=is_user),
-                "Owner": st.column_config.TextColumn(disabled=is_user),
-                "Category": st.column_config.TextColumn(disabled=is_user),
-                "Priority": st.column_config.TextColumn(disabled=is_user),
-                "Date": st.column_config.TextColumn(disabled=True),
-            }
-        )
-        if st.button("Save Changes"):
-            save_data(upd, TASK_DB); st.success("Saved!")
+        updated = st.data_editor(disp, use_container_width=True)
+        if st.button("Save"):
+            save_data(updated, TASK_DB)
+            st.success("Saved!")
 
     if st.sidebar.button("Logout"):
         st.session_state.clear()
