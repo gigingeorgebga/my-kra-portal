@@ -189,62 +189,76 @@ else:
                 st.success("Task Published!")
 
     # --- TAB: MANAGE TEAM (INVITE + ROLE EDITING) ---
-    elif choice == "👥 Manage Team":
+    elif choice == "👥 Manage Team" and st.session_state['role'] in ["Admin", "Manager"]:
         st.header("Team Management")
         
-        # --- PART 1: ADD / INVITE NEW MEMBER ---
+        # --- PART 1: ADD / INVITE NEW MEMBER (WITH DUPLICATE CHECK) ---
         with st.form("invite_form", clear_on_submit=True):
             st.subheader("➕ Invite New Member")
             c1, c2 = st.columns(2)
-            n, e = c1.text_input("Full Name"), c2.text_input("Email")
+            n = c1.text_input("Full Name")
+            e = c2.text_input("Email").strip().lower()
             r = c1.selectbox("Role", ["User", "Manager", "Admin"])
             m = c2.selectbox("Reporting Manager", ["None"] + user_df['Name'].tolist())
             
             if st.form_submit_button("Add Member & Send Invite"):
                 if n and e:
-                    new_u = pd.DataFrame([{"Name": n, "Email": e, "Role": r, "Manager": m, "Password": "welcome123"}])
-                    user_df = pd.concat([user_df, new_u], ignore_index=True)
-                    user_df.to_csv(USER_DB, index=False)
-                    
-                    email_success = send_invite_email(e, n)
-                    if email_success:
-                        st.success(f"✅ Invite sent to {e}!")
-                        st.rerun()
+                    # CHECK IF USER ALREADY EXISTS
+                    if e in user_df['Email'].str.lower().values:
+                        st.error(f"❌ Error: A user with the email '{e}' already exists!")
                     else:
-                        st.warning("⚠️ User added, but email failed. Check the error above.")
+                        new_u = pd.DataFrame([{"Name": n, "Email": e, "Role": r, "Manager": m, "Password": "welcome123"}])
+                        user_df = pd.concat([user_df, new_u], ignore_index=True)
+                        user_df.to_csv(USER_DB, index=False)
+                        
+                        email_success = send_invite_email(e, n)
+                        if email_success:
+                            st.success(f"✅ Invite sent to {e}!")
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ User added, but email failed. Check settings.")
                 else:
                     st.error("Name and Email are mandatory.")
 
         st.divider()
         
-        # --- PART 2: ACTIVE DIRECTORY & RESEND OPTION ---
-        st.subheader("👥 Active Directory & Role Management")
+        # --- PART 2: ACTIVE DIRECTORY & STATUS TRACKER ---
+        st.subheader("👥 Active Directory & Status")
         
-        # REFRESH DATA HERE:
+        # Refresh data to show current state
         user_df = load_db(USER_DB, ["Name", "Email", "Password", "Role", "Manager"])
         
-        # Display the list in an editable table
+        # ADD STATUS COLUMN: If password is 'welcome123' -> Pending, otherwise -> Active
+        user_df['Status'] = user_df['Password'].apply(
+            lambda x: "🟡 Pending" if x == "welcome123" else "🟢 Active"
+        )
+        
+        # Display editable table (Email is locked, but Role/Manager/Status are visible)
         edited_users = st.data_editor(
-            user_df[["Name", "Email", "Role", "Manager"]], 
+            user_df[["Name", "Email", "Role", "Manager", "Status"]], 
             use_container_width=True,
             column_config={
                 "Role": st.column_config.SelectboxColumn("Role", options=["User", "Manager", "Admin"], required=True),
-                # We also refresh the manager list here to include the new person
                 "Manager": st.column_config.SelectboxColumn("Manager", options=["None"] + user_df['Name'].tolist()),
-                "Email": st.column_config.TextColumn("Email", disabled=True) 
+                "Email": st.column_config.TextColumn("Email", disabled=True),
+                "Status": st.column_config.TextColumn("Status", disabled=True) 
             },
-            key="user_role_editor"
+            key="user_role_editor",
+            hide_index=True
         )
         
         col_s1, col_s2 = st.columns([1, 1])
         if col_s1.button("💾 Save User Role Updates", type="primary", use_container_width=True):
             for i, row in edited_users.iterrows():
-                user_df.at[i, "Role"] = row["Role"]
-                user_df.at[i, "Manager"] = row["Manager"]
-            user_df.to_csv(USER_DB, index=False)
+                # Update the main user_df with the changes from the table
+                idx = user_df.index[user_df['Email'] == row['Email']]
+                user_df.loc[idx, "Role"] = row["Role"]
+                user_df.loc[idx, "Manager"] = row["Manager"]
+            
+            # Save back to CSV (preserving the passwords)
+            user_df[["Name", "Email", "Password", "Role", "Manager"]].to_csv(USER_DB, index=False)
             st.success("User roles and managers updated!")
             st.rerun()
-
         # NEW: RESEND INVITE BUTTON
         with st.expander("✉️ Resend Invite to Existing Member"):
             resend_name = st.selectbox("Select user to resend email", user_df['Name'].tolist())
