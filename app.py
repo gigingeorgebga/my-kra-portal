@@ -72,7 +72,7 @@ def send_invite_email(recipient_email, recipient_name):
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 
 # Load Users for Login
-user_df = load_data("users", ["Name", "Email", "Password", "Role", "Manager"])
+user_df = load_data("users", cols=["Name", "Email", "Password", "Role", "Manager"])
 
 if not st.session_state['logged_in']:
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -96,8 +96,8 @@ if not st.session_state['logged_in']:
                         st.error("Invalid Credentials")
 else:
     # Load Tasks and Clients
-    task_df = load_data("tasks", ["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Status", "Start_Time", "End_Time", "Comments"])
-    client_df = load_data("clients", ["Client_Name"])
+    task_df = load_data("tasks", cols=["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Status", "Start_Time", "End_Time", "Comments"])
+client_df = load_data("clients", cols=["Client_Name"])
 
     # --- SIDEBAR & NAVIGATION ---
     if os.path.exists(LOGO_FILE): st.sidebar.image(LOGO_FILE, use_container_width=True)
