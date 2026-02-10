@@ -125,6 +125,11 @@ else:
     # --- TAB: DASHBOARD ---
     if choice == "📊 Dashboard":
         st.header("Operations Dashboard")
+        
+        # FIX: Convert Time columns to avoid the crash
+        for col in ["Start_Time", "End_Time"]:
+            task_df[col] = pd.to_datetime(task_df[col], errors='coerce').dt.time
+
         def auto_save():
             edits = st.session_state["dash_editor"]["edited_rows"]
             if edits:
@@ -134,7 +139,25 @@ else:
                 task_df.to_csv(TASK_DB, index=False)
                 st.toast("✅ Auto-saved!")
 
-        view_df = task_df if st.session_state['role'] == "Admin" else task_df[task_df['Owner'] == st.session_state['user_name']]
+        # Filter: Only show tasks relevant to TODAY's WD or Date
+        current_wd = get_current_wd() # e.g., "WD 3"
+        today_date = date.today().strftime("%Y-%m-%d")
+        today_day = date.today().strftime("%A")
+
+        if st.session_state['role'] == "Admin":
+            view_df = task_df
+        else:
+            # Smart Filter for Users
+            view_df = task_df[
+                (task_df['Owner'] == st.session_state['user_name']) & 
+                (
+                    (task_df['Frequency'] == "Daily") |
+                    (task_df['WD_Marker'] == current_wd) |
+                    (task_df['Frequency'] == today_day) | # For Weekly
+                    (task_df['Date'] == today_date)       # For Ad-hoc
+                )
+            ]
+
         st.data_editor(
             view_df, use_container_width=True, key="dash_editor", on_change=auto_save,
             column_config={
@@ -147,25 +170,51 @@ else:
 
     # --- TAB: ASSIGN ACTIVITY ---
     elif choice == "➕ Assign Activity":
-        st.header("Create New Assignment")
-        with st.form("assign_form"):
-            c = st.selectbox("Client", client_df['Client_Name'].tolist() if not client_df.empty else ["No Clients"])
-            tow = st.selectbox("Tower", ["O2C", "P2P", "R2R"])
-            act = st.text_input("Activity Description")
-            sop = st.text_input("SOP Link")
-            wdm = st.text_input("WD Marker")
-            freq = st.selectbox("Frequency", ["Daily", "Weekly", "Monthly", "Ad-hoc"])
-            own = st.selectbox("Action Owner", user_df['Name'].tolist())
-            rev = st.selectbox("Reviewer", user_df['Name'].tolist())
+        st.header("Task Assignment Hub")
+        
+        tab1, tab2 = st.tabs(["Manual Entry", "Bulk Upload (CSV)"])
+        
+        with tab1:
+            with st.form("assign_form"):
+                col1, col2 = st.columns(2)
+                c = col1.selectbox("Client", client_df['Client_Name'].tolist() if not client_df.empty else ["No Clients"])
+                freq = col2.selectbox("Frequency", ["Daily", "Weekly", "Monthly", "Ad-hoc"])
+                
+                # Dynamic Logic based on Frequency
+                wdm = ""
+                spec_date = ""
+                if freq == "Monthly":
+                    wdm = st.text_input("Enter WD Marker (e.g., WD 1)")
+                elif freq == "Weekly":
+                    wdm = st.selectbox("Select Day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
+                elif freq == "Ad-hoc":
+                    spec_date = st.date_input("Select Date")
+                
+                act = st.text_input("Activity Description")
+                own = st.selectbox("Action Owner", user_df['Name'].tolist())
+                
+                if st.form_submit_button("Publish Task"):
+                    new_t = pd.DataFrame([{
+                        "Date": str(spec_date), "Client": c, "Activity": act, 
+                        "Frequency": freq, "WD_Marker": wdm, "Owner": own, "Status": "🔴 Pending"
+                    }])
+                    pd.concat([task_df, new_t], ignore_index=True).to_csv(TASK_DB, index=False)
+                    st.success("Task Published!")
+
+        with tab2:
+            st.subheader("Bulk Import")
+            # Template Download
+            template = pd.DataFrame(columns=["Client", "Frequency", "WD_Marker", "Activity", "Owner"])
+            csv = template.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Download CSV Template", data=csv, file_name="task_template.csv", mime="text/csv")
             
-            if st.form_submit_button("Publish Task"):
-                new_t = pd.DataFrame([{
-                    "Date": date.today().strftime("%Y-%m-%d"), "Client": c, "Tower": tow, 
-                    "Activity": act, "SOP_Link": sop, "WD_Marker": wdm, "Frequency": freq,
-                    "Owner": own, "Reviewer": rev, "Status": "🔴 Pending"
-                }])
-                pd.concat([task_df, new_t], ignore_index=True).to_csv(TASK_DB, index=False)
-                st.success("Task Published!")
+            uploaded_file = st.file_uploader("Upload Completed Template", type="csv")
+            if uploaded_file:
+                up_df = pd.read_csv(uploaded_file)
+                if st.button("Confirm Upload"):
+                    pd.concat([task_df, up_df], ignore_index=True).to_csv(TASK_DB, index=False)
+                    st.success(f"Successfully uploaded {len(up_df)} tasks!")
+                    st.rerun()
 
     # --- TAB: MANAGE TEAM ---
     elif choice == "👥 Manage Team":
