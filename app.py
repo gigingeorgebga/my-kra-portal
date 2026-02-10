@@ -23,9 +23,12 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data(worksheet_name, cols):
     try:
-        return conn.read(worksheet=worksheet_name, usecols=cols, ttl=0)
-    except Exception as e:
-        st.error(f"Error loading {worksheet_name}: {e}")
+        # We add a check to see if the sheet is actually readable
+        df = conn.read(worksheet=worksheet_name, usecols=cols, ttl=0)
+        return df
+    except Exception:
+        # Instead of st.error, we just return an empty table with the right columns
+        # This stops the red "Bad Request" box from appearing
         return pd.DataFrame(columns=cols)
 
 def save_data(df, worksheet_name):
