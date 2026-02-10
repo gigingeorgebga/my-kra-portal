@@ -19,12 +19,10 @@ LOGO_FILE = "1 BGA Logo Colour.png"
 CALENDAR_DB = "calendar.csv"
 
 # --- 2. DATA ENGINE (GOOGLE SHEETS) ---
-# This looks into your "Secrets" to find the URL automatically
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data(worksheet_name, cols):
     try:
-        # ttl=0 means it bypasses cache to get fresh data every time
         return conn.read(worksheet=worksheet_name, usecols=cols, ttl=0)
     except Exception as e:
         st.error(f"Error loading {worksheet_name}: {e}")
@@ -71,7 +69,6 @@ def send_invite_email(recipient_email, recipient_name):
 # --- 4. AUTHENTICATION ---
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 
-# Load Users for Login
 user_df = load_data("users", cols=["Name", "Email", "Password", "Role", "Manager"])
 
 if not st.session_state['logged_in']:
@@ -83,7 +80,6 @@ if not st.session_state['logged_in']:
             u = st.text_input("Email").strip().lower()
             p = st.text_input("Password", type="password")
             if st.form_submit_button("Sign In", use_container_width=True):
-                # Admin Override
                 if u == "admin@thebga.io" and p == "admin123":
                     st.session_state.update({"logged_in": True, "user_name": "Admin", "role": "Admin", "email": u})
                     st.rerun()
@@ -95,11 +91,11 @@ if not st.session_state['logged_in']:
                     else:
                         st.error("Invalid Credentials")
 else:
-    # Load Tasks and Clients
+    # --- LOAD MAIN DATA ---
     task_df = load_data("tasks", cols=["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Status", "Start_Time", "End_Time", "Comments"])
-client_df = load_data("clients", cols=["Client_Name"])
+    client_df = load_data("clients", cols=["Client_Name"])
 
-    # --- SIDEBAR & NAVIGATION ---
+    # --- SIDEBAR ---
     if os.path.exists(LOGO_FILE): st.sidebar.image(LOGO_FILE, use_container_width=True)
     st.sidebar.info(f"📅 **Context:** {get_current_wd()}")
     
@@ -113,7 +109,6 @@ client_df = load_data("clients", cols=["Client_Name"])
     # --- DASHBOARD ---
     if choice == "📊 Dashboard":
         st.header("Operations Dashboard")
-        
         display_df = task_df.copy()
         for col in ["Start_Time", "End_Time"]:
             display_df[col] = pd.to_datetime(display_df[col], errors='coerce').dt.time
@@ -126,7 +121,6 @@ client_df = load_data("clients", cols=["Client_Name"])
                         task_df.at[int(index), key] = value
                 save_data(task_df, "tasks")
 
-        # Filters
         current_wd = get_current_wd()
         today_date = date.today().strftime("%Y-%m-%d")
         today_day = date.today().strftime("%A")
@@ -158,23 +152,19 @@ client_df = load_data("clients", cols=["Client_Name"])
     elif choice == "➕ Assign Activity":
         st.header("Task Assignment Hub")
         tab1, tab2 = st.tabs(["Manual Entry", "Bulk Upload"])
-        
         with tab1:
             with st.form("assign_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
                 c_list = client_df['Client_Name'].tolist() if not client_df.empty else ["No Clients"]
                 c = col1.selectbox("Client", c_list)
                 freq = col2.selectbox("Frequency", ["Daily", "Weekly", "Monthly", "Ad-hoc"])
-                
                 wdm, spec_date = "", ""
                 if freq == "Monthly": wdm = st.text_input("WD Marker (e.g. WD 1)")
                 elif freq == "Weekly": wdm = st.selectbox("Day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
                 elif freq == "Ad-hoc": spec_date = st.date_input("Date")
-                
                 act = st.text_input("Activity Description")
                 own = st.selectbox("Action Owner", user_df['Name'].tolist())
                 rev = st.selectbox("Reviewer", user_df['Name'].tolist())
-                
                 if st.form_submit_button("Publish Task"):
                     new_t = pd.DataFrame([{
                         "Date": str(spec_date) if freq == "Ad-hoc" else date.today().strftime("%Y-%m-%d"), 
@@ -183,16 +173,6 @@ client_df = load_data("clients", cols=["Client_Name"])
                     }])
                     save_data(pd.concat([task_df, new_t], ignore_index=True), "tasks")
                     st.rerun()
-
-        with tab2:
-            st.subheader("Bulk Import")
-            template = pd.DataFrame(columns=["Client", "Frequency", "WD_Marker", "Activity", "Owner", "Reviewer"])
-            st.download_button("📥 Download Template", template.to_csv(index=False).encode('utf-8'), "template.csv")
-            file = st.file_uploader("Upload CSV", type="csv")
-            if file and st.button("Confirm Bulk"):
-                up_df = pd.read_csv(file)
-                save_data(pd.concat([task_df, up_df], ignore_index=True), "tasks")
-                st.rerun()
 
     # --- CLIENTS ---
     elif choice == "🏢 Clients":
