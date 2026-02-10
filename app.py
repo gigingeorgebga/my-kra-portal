@@ -9,10 +9,12 @@ from datetime import datetime, date
 # --- 1. CONFIGURATION & EMAIL SETTINGS ---
 st.set_page_config(page_title="BGA F&A Workflow", layout="wide")
 
+# Custom branding & URLs
 SENDER_EMAIL = "admin@thebga.io"
 SENDER_PASSWORD = "vjec elpd kuvh frqp" 
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
+PORTAL_URL = "https://my-team-planner.streamlit.app/"
 
 USER_DB, TASK_DB, CLIENT_DB, CALENDAR_DB = "users.csv", "database.csv", "clients.csv", "calendar.csv"
 LOGO_FILE = "1 BGA Logo Colour.png"
@@ -46,7 +48,7 @@ def send_invite_email(recipient_email, recipient_name):
         msg['From'] = SENDER_EMAIL
         msg['To'] = recipient_email
         msg['Subject'] = "BGA Portal Invitation"
-        body = f"Hello {recipient_name},\n\nYou have been invited to the BGA F&A Workflow Portal.\n\n🔗 Login Here: https://my-team-planner.streamlit.app/\n\nUsername: {recipient_email}\nTemporary Password: welcome123\n\nPlease login and begin your tasks."
+        body = f"Hello {recipient_name},\n\nYou have been invited to the BGA F&A Workflow Portal.\n\n🔗 Login Here: {PORTAL_URL}\n\nUsername: {recipient_email}\nTemporary Password: welcome123\n\nPlease login and begin your tasks."
         msg.attach(MIMEText(body, 'plain'))
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
         server.starttls()
@@ -126,9 +128,10 @@ else:
     if choice == "📊 Dashboard":
         st.header("Operations Dashboard")
         
-        # FIX: Convert Time columns to avoid the crash
+        # PREPARE DATA: Clean time columns for the editor
+        display_df = task_df.copy()
         for col in ["Start_Time", "End_Time"]:
-            task_df[col] = pd.to_datetime(task_df[col], errors='coerce').dt.time
+            display_df[col] = pd.to_datetime(display_df[col], errors='coerce').dt.time
 
         def auto_save():
             edits = st.session_state["dash_editor"]["edited_rows"]
@@ -139,22 +142,21 @@ else:
                 task_df.to_csv(TASK_DB, index=False)
                 st.toast("✅ Auto-saved!")
 
-        # Filter: Only show tasks relevant to TODAY's WD or Date
-        current_wd = get_current_wd() # e.g., "WD 3"
+        # FILTER LOGIC
+        current_wd = get_current_wd()
         today_date = date.today().strftime("%Y-%m-%d")
         today_day = date.today().strftime("%A")
 
         if st.session_state['role'] == "Admin":
-            view_df = task_df
+            view_df = display_df
         else:
-            # Smart Filter for Users
-            view_df = task_df[
-                (task_df['Owner'] == st.session_state['user_name']) & 
+            view_df = display_df[
+                (display_df['Owner'] == st.session_state['user_name']) & 
                 (
-                    (task_df['Frequency'] == "Daily") |
-                    (task_df['WD_Marker'] == current_wd) |
-                    (task_df['Frequency'] == today_day) | # For Weekly
-                    (task_df['Date'] == today_date)       # For Ad-hoc
+                    (display_df['Frequency'] == "Daily") |
+                    (display_df['WD_Marker'] == current_wd) |
+                    (display_df['Frequency'] == today_day) | 
+                    (display_df['Date'] == today_date)
                 )
             ]
 
@@ -171,18 +173,15 @@ else:
     # --- TAB: ASSIGN ACTIVITY ---
     elif choice == "➕ Assign Activity":
         st.header("Task Assignment Hub")
-        
         tab1, tab2 = st.tabs(["Manual Entry", "Bulk Upload (CSV)"])
         
         with tab1:
-            with st.form("assign_form"):
+            with st.form("assign_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
                 c = col1.selectbox("Client", client_df['Client_Name'].tolist() if not client_df.empty else ["No Clients"])
                 freq = col2.selectbox("Frequency", ["Daily", "Weekly", "Monthly", "Ad-hoc"])
                 
-                # Dynamic Logic based on Frequency
-                wdm = ""
-                spec_date = ""
+                wdm, spec_date = "", ""
                 if freq == "Monthly":
                     wdm = st.text_input("Enter WD Marker (e.g., WD 1)")
                 elif freq == "Weekly":
@@ -192,26 +191,28 @@ else:
                 
                 act = st.text_input("Activity Description")
                 own = st.selectbox("Action Owner", user_df['Name'].tolist())
+                rev = st.selectbox("Reviewer", user_df['Name'].tolist())
                 
                 if st.form_submit_button("Publish Task"):
                     new_t = pd.DataFrame([{
-                        "Date": str(spec_date), "Client": c, "Activity": act, 
-                        "Frequency": freq, "WD_Marker": wdm, "Owner": own, "Status": "🔴 Pending"
+                        "Date": str(spec_date) if freq == "Ad-hoc" else date.today().strftime("%Y-%m-%d"), 
+                        "Client": c, "Activity": act, "Frequency": freq, "WD_Marker": wdm, 
+                        "Owner": own, "Reviewer": rev, "Status": "🔴 Pending"
                     }])
                     pd.concat([task_df, new_t], ignore_index=True).to_csv(TASK_DB, index=False)
                     st.success("Task Published!")
+                    st.rerun()
 
         with tab2:
             st.subheader("Bulk Import")
-            # Template Download
-            template = pd.DataFrame(columns=["Client", "Frequency", "WD_Marker", "Activity", "Owner"])
+            template = pd.DataFrame(columns=["Client", "Frequency", "WD_Marker", "Activity", "Owner", "Reviewer"])
             csv = template.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download CSV Template", data=csv, file_name="task_template.csv", mime="text/csv")
+            st.download_button("📥 Download CSV Template", data=csv, file_name="bga_task_template.csv", mime="text/csv")
             
             uploaded_file = st.file_uploader("Upload Completed Template", type="csv")
             if uploaded_file:
                 up_df = pd.read_csv(uploaded_file)
-                if st.button("Confirm Upload"):
+                if st.button("Confirm Bulk Upload"):
                     pd.concat([task_df, up_df], ignore_index=True).to_csv(TASK_DB, index=False)
                     st.success(f"Successfully uploaded {len(up_df)} tasks!")
                     st.rerun()
