@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from streamlit_gsheets import GSheetsConnection
+from supabase import create_client, Client # Added for Supabase
 import os
 import smtplib
 from email.mime.text import MIMEText
@@ -18,28 +18,35 @@ PORTAL_URL = "https://my-team-planner.streamlit.app/"
 LOGO_FILE = "1 BGA Logo Colour.png"
 CALENDAR_DB = "calendar.csv"
 
-# --- 2. DATA ENGINE (GOOGLE SHEETS) ---
-# Your specific Sheet ID
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1VBNeBZ9nLi8nyNcYIy1ysabsbuSiKKgN8mr-akhh_dg"
+# --- 2. DATA ENGINE (SUPABASE) ---
+# This uses the Secrets you just saved
+url: str = st.secrets["SUPABASE_URL"]
+key: str = st.secrets["SUPABASE_KEY"]
+supabase: Client = create_client(url, key)
 
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-def load_data(worksheet_name, cols):
+def load_data(table_name, cols):
     try:
-        # We point directly to your URL
-        df = conn.read(spreadsheet=SHEET_URL, worksheet=worksheet_name, usecols=cols, ttl=0)
-        return df
+        # Fetches data from Supabase table
+        response = supabase.table(table_name).select("*").execute()
+        df = pd.DataFrame(response.data)
+        if df.empty:
+            return pd.DataFrame(columns=cols)
+        # Ensure only requested columns are returned to match your existing logic
+        return df[cols] if all(c in df.columns for c in cols) else df
     except Exception as e:
-        # Returns empty dataframe if sheet is empty or unreachable
         return pd.DataFrame(columns=cols)
 
-def save_data(df, worksheet_name):
+def save_data(df, table_name):
     try:
-        # Force the update to your specific sheet
-        conn.update(spreadsheet=SHEET_URL, worksheet=worksheet_name, data=df)
-        st.toast(f"✅ {worksheet_name} updated successfully!")
+        # Supabase works best with list of dicts
+        data_dict = df.to_dict(orient="records")
+        # We clear and re-insert to mimic the 'update' behavior of sheets
+        # Note: For professional apps we usually upsert, but this keeps your logic simple
+        supabase.table(table_name).delete().neq("email", "0").execute() # Clear (if email exists)
+        supabase.table(table_name).insert(data_dict).execute()
+        st.toast(f"✅ {table_name} updated successfully!")
     except Exception as e:
-        st.error(f"Save failed. Check if Sheet is set to 'Anyone with link can EDIT'")
+        st.error(f"Save failed to Supabase.")
         st.info(f"Error details: {e}")
 
 # --- 3. HELPER FUNCTIONS ---
@@ -76,6 +83,7 @@ def send_invite_email(recipient_email, recipient_name):
 # --- 4. AUTHENTICATION ---
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 
+# Load users from Supabase
 user_df = load_data("users", cols=["Name", "Email", "Password", "Role", "Manager"])
 
 if not st.session_state['logged_in']:
@@ -98,7 +106,7 @@ if not st.session_state['logged_in']:
                     else:
                         st.error("Invalid Credentials")
 else:
-    # --- LOAD MAIN DATA ---
+    # --- LOAD MAIN DATA FROM SUPABASE ---
     task_df = load_data("tasks", cols=["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Status", "Start_Time", "End_Time", "Comments"])
     client_df = load_data("clients", cols=["Client_Name"])
 
@@ -118,7 +126,8 @@ else:
         st.header("Operations Dashboard")
         display_df = task_df.copy()
         for col in ["Start_Time", "End_Time"]:
-            display_df[col] = pd.to_datetime(display_df[col], errors='coerce').dt.time
+            if col in display_df.columns:
+                display_df[col] = pd.to_datetime(display_df[col], errors='coerce').dt.time
 
         def auto_save():
             edits = st.session_state["dash_editor"]["edited_rows"]
