@@ -19,24 +19,28 @@ LOGO_FILE = "1 BGA Logo Colour.png"
 CALENDAR_DB = "calendar.csv"
 
 # --- 2. DATA ENGINE (GOOGLE SHEETS) ---
+# Your specific Sheet ID
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1VBNeBZ9nLi8nyNcYIy1ysabsbuSiKKgN8mr-akhh_dg"
+
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data(worksheet_name, cols):
     try:
-        # We add a check to see if the sheet is actually readable
-        df = conn.read(worksheet=worksheet_name, usecols=cols, ttl=0)
+        # We point directly to your URL
+        df = conn.read(spreadsheet=SHEET_URL, worksheet=worksheet_name, usecols=cols, ttl=0)
         return df
-    except Exception:
-        # Instead of st.error, we just return an empty table with the right columns
-        # This stops the red "Bad Request" box from appearing
+    except Exception as e:
+        # Returns empty dataframe if sheet is empty or unreachable
         return pd.DataFrame(columns=cols)
 
 def save_data(df, worksheet_name):
     try:
-        conn.update(worksheet=worksheet_name, data=df)
-        st.toast(f"✅ {worksheet_name} synced to Google Sheets!")
+        # Force the update to your specific sheet
+        conn.update(spreadsheet=SHEET_URL, worksheet=worksheet_name, data=df)
+        st.toast(f"✅ {worksheet_name} updated successfully!")
     except Exception as e:
-        st.error(f"Failed to save to Google Sheets: {e}")
+        st.error(f"Save failed. Check if Sheet is set to 'Anyone with link can EDIT'")
+        st.info(f"Error details: {e}")
 
 # --- 3. HELPER FUNCTIONS ---
 def get_current_wd():
