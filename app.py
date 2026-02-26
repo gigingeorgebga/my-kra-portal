@@ -11,39 +11,30 @@ from datetime import datetime, date
 st.set_page_config(
     page_title="BGA F&A Workflow", 
     layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': None,
-        'Report a bug': None,
-        'About': None
-    }
+    initial_sidebar_state="expanded"
 )
 
-# This is the "Magic" code that hides the GitHub and Fork icons
+# This is the 'Nuclear Option' to hide everything Streamlit-related
 st.markdown("""
     <style>
-    /* This targets the entire container that holds those buttons */
-    footer {display: none !important;}
-    header {display: none !important;}
+    /* 1. Hide the entire header and footer containers */
+    header, footer {visibility: hidden !important; display: none !important;}
     
-    /* This targets the 'Manage App' and 'Deploy' buttons specifically */
-    .stAppDeployButton, .stActionButton, [data-testid="stStatusWidget"] {
-        display: none !important;
-        visibility: hidden !important;
-    }
-
-    /* This removes the extra padding at the top and bottom */
-    .block-container {
-        padding-top: 0rem !important;
-        padding-bottom: 0rem !important;
-    }
+    /* 2. Target the specific floating buttons and menus */
+    #MainMenu {visibility: hidden !important;}
+    .stAppDeployButton {display: none !important;}
+    [data-testid="stStatusWidget"] {display: none !important;}
+    [data-testid="stToolbar"] {display: none !important;}
+    [data-testid="stDecoration"] {display: none !important;}
     
-    /* Hides the 'Made with Streamlit' footer if it exists */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
+    /* 3. Disable pointer events so nothing is clickable in the corners */
+    button[title="View source"] {display: none !important;}
+    .st-emotion-cache-15zrgzn {display: none !important;}
+    
+    /* 4. Shift the app up to fill the gap */
+    .block-container {padding-top: 1rem !important;}
     </style>
     """, unsafe_allow_html=True)
-
 SENDER_EMAIL = "admin@thebga.io"
 SENDER_PASSWORD = "vjec elpd kuvh frqp" 
 SMTP_SERVER = "smtp.gmail.com"
