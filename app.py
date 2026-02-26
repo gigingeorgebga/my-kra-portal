@@ -144,7 +144,29 @@ if not st.session_state['logged_in']:
                     else:
                         st.error("Invalid Credentials")
 else:
-    # --- LOAD MAIN DATA FROM SUPABASE ---
+    # --- A. PASSWORD SECURITY CHECK ---
+    # This checks if the person logging in still has the default password
+    current_user_row = user_df[user_df['Email'].str.lower() == st.session_state['email'].lower()]
+    
+    if not current_user_row.empty and str(current_user_row.iloc[0]['Password']) == "welcome123":
+        st.header("🔐 Reset Temporary Password")
+        st.info(f"Hello {st.session_state['user_name']}, for security reasons you must change your password before accessing the portal.")
+        
+        with st.form("force_reset"):
+            new_p = st.text_input("New Password", type="password")
+            conf_p = st.text_input("Confirm New Password", type="password")
+            if st.form_submit_button("Update & Login"):
+                if new_p == conf_p and len(new_p) > 3:
+                    user_df.loc[user_df['Email'].str.lower() == st.session_state['email'].lower(), 'Password'] = new_p
+                    save_data(user_df, "users")
+                    st.success("Password updated! Please wait for refresh...")
+                    st.rerun()
+                else:
+                    st.error("Passwords must match and be at least 4 characters.")
+        st.stop() # This "blinds" the rest of the app until they finish
+
+    # --- B. LOAD MAIN DATA ---
+    # This only runs if the password check above is passed
     task_df = load_data("tasks", cols=["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Status", "Start_Time", "End_Time", "Comments"])
     client_df = load_data("clients", cols=["Client_Name"])
 
