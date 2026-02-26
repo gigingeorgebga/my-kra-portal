@@ -160,6 +160,7 @@ else:
                     user_df.loc[user_df['Email'].str.lower() == st.session_state['email'].lower(), 'Password'] = new_p
                     save_data(user_df, "users")
                     st.success("Password updated! Please wait for refresh...")
+                    st.rerun() # <--- THIS IS THE MISSING NUDGE
                     st.rerun() # <--- ADD THIS LINE
                     st.rerun()
                 else:
