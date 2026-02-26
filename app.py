@@ -11,30 +11,24 @@ from datetime import datetime, date
 st.set_page_config(
     page_title="BGA F&A Workflow", 
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': None
+    }
 )
 
-# This is the 'Nuclear Option' to hide everything Streamlit-related
+# This is the "Magic" code that hides the GitHub and Fork icons
 st.markdown("""
     <style>
-    /* 1. Hide the entire header and footer containers */
-    header, footer {visibility: hidden !important; display: none !important;}
-    
-    /* 2. Target the specific floating buttons and menus */
-    #MainMenu {visibility: hidden !important;}
-    .stAppDeployButton {display: none !important;}
-    [data-testid="stStatusWidget"] {display: none !important;}
-    [data-testid="stToolbar"] {display: none !important;}
-    [data-testid="stDecoration"] {display: none !important;}
-    
-    /* 3. Disable pointer events so nothing is clickable in the corners */
-    button[title="View source"] {display: none !important;}
-    .st-emotion-cache-15zrgzn {display: none !important;}
-    
-    /* 4. Shift the app up to fill the gap */
-    .block-container {padding-top: 1rem !important;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    [data-testid="stStatusWidget"] {display: none;}
     </style>
     """, unsafe_allow_html=True)
+
 SENDER_EMAIL = "admin@thebga.io"
 SENDER_PASSWORD = "vjec elpd kuvh frqp" 
 SMTP_SERVER = "smtp.gmail.com"
