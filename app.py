@@ -22,10 +22,21 @@ st.set_page_config(
 # This is the "Magic" code that hides the GitHub and Fork icons
 st.markdown("""
     <style>
+    /* 1. Hide the top bar and main menu */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
-    [data-testid="stStatusWidget"] {display: none;}
+    
+    /* 2. Hide the red 'Deploy' crown icon at the top */
+    .stAppDeployButton {display: none !important;}
+    
+    /* 3. Hide the blue 'Manage App' circle at the bottom right */
+    [data-testid="stStatusWidget"] {display: none !important;}
+    div[data-testid="stToolbar"] {display: none !important;}
+    button[title="View source"] {display: none !important;}
+    
+    /* 4. Final cleanup of any floating icons */
+    #stDecoration {display:none !important;}
     </style>
     """, unsafe_allow_html=True)
 
