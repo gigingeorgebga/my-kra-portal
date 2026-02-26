@@ -8,7 +8,26 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime, date
 
 # --- 1. CONFIGURATION ---
-st.set_page_config(page_title="BGA F&A Workflow", layout="wide")
+st.set_page_config(
+    page_title="BGA F&A Workflow", 
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': None
+    }
+)
+
+# This is the "Magic" code that hides the GitHub and Fork icons
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    [data-testid="stStatusWidget"] {display: none;}
+    </style>
+    """, unsafe_allow_html=True)
 
 SENDER_EMAIL = "admin@thebga.io"
 SENDER_PASSWORD = "vjec elpd kuvh frqp" 
