@@ -40,9 +40,17 @@ def save_data(df, table_name):
     try:
         # Supabase works best with list of dicts
         data_dict = df.to_dict(orient="records")
-        # We clear and re-insert to mimic the 'update' behavior of sheets
-        # Note: For professional apps we usually upsert, but this keeps your logic simple
-        supabase.table(table_name).delete().neq("email", "0").execute() # Clear (if email exists)
+        
+        # This is the fix: It checks which table we are updating 
+        # and uses the correct column name for the cleanup
+        if table_name == "users":
+            supabase.table(table_name).delete().neq("Email", "0").execute()
+        elif table_name == "clients":
+            supabase.table(table_name).delete().neq("Client_Name", "0").execute()
+        else:
+            # For the tasks table
+            supabase.table(table_name).delete().neq("Activity", "0").execute()
+
         supabase.table(table_name).insert(data_dict).execute()
         st.toast(f"✅ {table_name} updated successfully!")
     except Exception as e:
