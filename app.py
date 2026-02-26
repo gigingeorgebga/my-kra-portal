@@ -157,15 +157,19 @@ else:
             conf_p = st.text_input("Confirm New Password", type="password")
             if st.form_submit_button("Update & Login"):
                 if new_p == conf_p and len(new_p) > 3:
+                    # 1. Update the password in the current list
                     user_df.loc[user_df['Email'].str.lower() == st.session_state['email'].lower(), 'Password'] = new_p
+                    
+                    # 2. Save it to the database
                     save_data(user_df, "users")
-                    st.success("Password updated! Please wait for refresh...")
-                    st.rerun() # <--- THIS IS THE MISSING NUDGE
-                    st.rerun() # <--- ADD THIS LINE
-                    st.rerun()
+                    
+                    # 3. THE MAGIC ERASER: Clear the app's memory so it sees the change
+                    st.cache_data.clear() 
+                    
+                    st.success("Success! Redirecting to Dashboard...")
+                    st.rerun() 
                 else:
                     st.error("Passwords must match and be at least 4 characters.")
-        st.stop() # This "blinds" the rest of the app until they finish
 
     # --- B. LOAD MAIN DATA ---
     # This only runs if the password check above is passed
