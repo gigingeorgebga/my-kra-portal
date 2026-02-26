@@ -22,21 +22,25 @@ st.set_page_config(
 # This is the "Magic" code that hides the GitHub and Fork icons
 st.markdown("""
     <style>
-    /* 1. Hide the top header entirely */
-    header {visibility: hidden !important;}
-    footer {visibility: hidden !important;}
+    /* This targets the entire container that holds those buttons */
+    footer {display: none !important;}
+    header {display: none !important;}
     
-    /* 2. Blind the bottom-right buttons (Manage App & Crown) */
-    .stAppDeployButton {display: none !important;}
-    [data-testid="stStatusWidget"] {display: none !important;}
-    div[data-testid="stToolbar"] {display: none !important;}
+    /* This targets the 'Manage App' and 'Deploy' buttons specifically */
+    .stAppDeployButton, .stActionButton, [data-testid="stStatusWidget"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    /* This removes the extra padding at the top and bottom */
+    .block-container {
+        padding-top: 0rem !important;
+        padding-bottom: 0rem !important;
+    }
     
-    /* 3. This is the 'Master Blind' for the floating footer area */
-    div[data-testid="stDecoration"] {display: none !important;}
-    div.stActionButton {display: none !important;}
-    
-    /* 4. Extra protection to make sure they stay hidden */
-    #MainMenu {visibility: hidden !important;}
+    /* Hides the 'Made with Streamlit' footer if it exists */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
