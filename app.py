@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client # Added for Supabase
 import os
+import time
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -122,7 +123,7 @@ def send_invite_email(recipient_email, recipient_name):
 if 'logged_in' not in st.session_state: 
     st.session_state['logged_in'] = False
 
-# We load the user data here so it refreshes every time the script reruns
+# Fresh load of user data
 user_df = load_data("users", cols=["Name", "Email", "Password", "Role", "Manager"])
 
 if not st.session_state['logged_in']:
@@ -148,33 +149,28 @@ else:
     # --- A. PASSWORD SECURITY CHECK ---
     current_user_row = user_df[user_df['Email'].str.lower() == st.session_state['email'].lower()]
     
-    # Check if the user still has the temporary password
     if not current_user_row.empty and str(current_user_row.iloc[0]['Password']) == "welcome123":
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.header("🔐 Reset Temporary Password")
-            st.info(f"Hello {st.session_state['user_name']}, please update your password to continue.")
+            st.info(f"Hello {st.session_state['user_name']}, please update your password.")
             
             with st.form("force_reset"):
                 new_p = st.text_input("New Password", type="password")
                 conf_p = st.text_input("Confirm New Password", type="password")
                 if st.form_submit_button("Update & Login", use_container_width=True):
                     if new_p == conf_p and len(new_p) > 3:
-                        # 1. Update password in the dataframe
                         user_df.loc[user_df['Email'].str.lower() == st.session_state['email'].lower(), 'Password'] = new_p
-                        # 2. Save it to Supabase
                         save_data(user_df, "users")
-                        # 3. Clear memory
                         st.cache_data.clear() 
                         st.success("Password updated! Redirecting...")
+                        time.sleep(1) # The 1-second "breather" for the database
                         st.rerun()
                     else:
-                        st.error("Passwords must match and be at least 4 characters.")
-        
-        # STOP HERE if password reset is needed
+                        st.error("Passwords must match and be 4+ characters.")
         st.stop() 
 
-    # --- B. LOAD MAIN DATA (This only runs if password is NOT welcome123) ---
+    # --- B. LOAD MAIN DATA ---
     task_df = load_data("tasks", cols=["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Status", "Start_Time", "End_Time", "Comments"])
     client_df = load_data("clients", cols=["Client_Name"])
     # --- SIDEBAR ---
