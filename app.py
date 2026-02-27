@@ -122,7 +122,7 @@ def send_invite_email(recipient_email, recipient_name):
 if 'logged_in' not in st.session_state: 
     st.session_state['logged_in'] = False
 
-# We load the user data right here so it refreshes every time the script reruns
+# We load the user data here so it refreshes every time the script reruns
 user_df = load_data("users", cols=["Name", "Email", "Password", "Role", "Manager"])
 
 if not st.session_state['logged_in']:
@@ -146,9 +146,9 @@ if not st.session_state['logged_in']:
                         st.error("Invalid Credentials")
 else:
     # --- A. PASSWORD SECURITY CHECK ---
-    # We look for the user in the FRESHLY LOADED user_df
     current_user_row = user_df[user_df['Email'].str.lower() == st.session_state['email'].lower()]
     
+    # Check if the user still has the temporary password
     if not current_user_row.empty and str(current_user_row.iloc[0]['Password']) == "welcome123":
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -160,33 +160,23 @@ else:
                 conf_p = st.text_input("Confirm New Password", type="password")
                 if st.form_submit_button("Update & Login", use_container_width=True):
                     if new_p == conf_p and len(new_p) > 3:
-                        # 1. Update password locally in the current list
+                        # 1. Update password in the dataframe
                         user_df.loc[user_df['Email'].str.lower() == st.session_state['email'].lower(), 'Password'] = new_p
-                        
-                        # 2. Save the whole list back to Supabase
+                        # 2. Save it to Supabase
                         save_data(user_df, "users")
-                        
-                        # 3. CRITICAL: Clear cache so next rerun gets the NEW password
+                        # 3. Clear memory
                         st.cache_data.clear() 
-                        
                         st.success("Password updated! Redirecting...")
                         st.rerun()
                     else:
                         st.error("Passwords must match and be at least 4 characters.")
         
-        # This prevents the dashboard from leaking out the bottom
-        st.stop() 
-
-    # --- B. LOAD MAIN DATA (This only runs if password is NOT welcome123) ---
-        
-        # --- THE WALL ---
-        # This command prevents the Sidebar and Dashboard from loading below the form
+        # STOP HERE if password reset is needed
         st.stop() 
 
     # --- B. LOAD MAIN DATA (This only runs if password is NOT welcome123) ---
     task_df = load_data("tasks", cols=["Date", "Client", "Tower", "Activity", "SOP_Link", "Owner", "Reviewer", "Frequency", "WD_Marker", "Status", "Start_Time", "End_Time", "Comments"])
     client_df = load_data("clients", cols=["Client_Name"])
-
     # --- SIDEBAR ---
     if os.path.exists(LOGO_FILE): st.sidebar.image(LOGO_FILE, use_container_width=True)
     st.sidebar.info(f"📅 **Context:** {get_current_wd()}")
