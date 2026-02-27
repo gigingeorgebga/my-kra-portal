@@ -159,12 +159,16 @@ else:
                 conf_p = st.text_input("Confirm New Password", type="password")
                 if st.form_submit_button("Update & Login", use_container_width=True):
                     if new_p == conf_p and len(new_p) > 3:
-                        # 1. Update password in the dataframe
+                        # Step 1: Update the password in the current data
                         user_df.loc[user_df['Email'].str.lower() == st.session_state['email'].lower(), 'Password'] = new_p
-                        # 2. Save it to Supabase
+                        
+                        # Step 2: Save that update to Supabase
                         save_data(user_df, "users")
-                        # 3. Clear memory and restart
+                        
+                        # Step 3: WIPE THE MEMORY (This stops the "Stuck" loop)
                         st.cache_data.clear() 
+                        
+                        # Step 4: Show success and REFRESH to the Dashboard
                         st.success("Password updated! Redirecting...")
                         st.rerun()
                     else:
