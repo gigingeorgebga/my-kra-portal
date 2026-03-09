@@ -158,16 +158,27 @@ else:
             with st.form("force_reset"):
                 new_p = st.text_input("New Password", type="password")
                 conf_p = st.text_input("Confirm New Password", type="password")
-                if st.form_submit_button("Update & Login", use_container_width=True):
-                    if new_p == conf_p and len(new_p) > 3:
-                        user_df.loc[user_df['Email'].str.lower() == st.session_state['email'].lower(), 'Password'] = new_p
-                        save_data(user_df, "users")
-                        st.cache_data.clear() 
-                        st.success("Password updated! Redirecting...")
-                        time.sleep(1) # The 1-second "breather" for the database
-                        st.rerun()
-                    else:
-                        st.error("Passwords must match and be 4+ characters.")
+             if st.form_submit_button("Update Password"):
+    if new_p == conf_p and len(new_p) > 3:
+        user_df.loc[
+            user_df['Email'].str.lower() == st.session_state['email'].lower(),
+            'Password'
+        ] = new_p
+
+        save_data(user_df, "users")
+
+        st.success("Password updated successfully! Please login again.")
+        time.sleep(1)
+
+        # Clear login session so user is sent back to login page
+        st.session_state['logged_in'] = False
+        st.session_state.pop('user_name', None)
+        st.session_state.pop('role', None)
+        st.session_state.pop('email', None)
+
+        st.rerun()
+    else:
+        st.error("Passwords must match and be 4+ characters.")
         st.stop() 
 
     # --- B. LOAD MAIN DATA ---
